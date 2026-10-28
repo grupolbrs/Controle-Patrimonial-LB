@@ -1,0 +1,1231 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0b1120">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Controle de Patrimônio - Grupo Libraga Brandão</title>
+    
+    <!-- PWA MANIFEST INJETADO DINAMICAMENTE -->
+    <link rel="manifest" id="pwa-manifest">
+    
+    <!-- Bibliotecas Tailwind CSS, SheetJS (Excel), jsPDF (PDF) e Html5-Qrcode (Leitor de Código) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script> tailwind.config = { darkMode: 'class' } </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+    <!-- FIREBASE SDK (Sincronização em Tempo Real) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <style>
+        .sidebar-bg { background-color: #0b1120; }
+        .sidebar-text { color: #94a3b8; }
+        .sidebar-hover:hover { background-color: #1e293b; color: #ffffff; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-[#0f172a] font-sans text-gray-800 dark:text-slate-200 overflow-hidden transition-colors duration-300">
+
+    <!-- ================= TELA DE LOGIN ================= -->
+    <div id="tela-login" class="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-[#0f172a] z-50 absolute w-full h-full p-4 transition-colors duration-300">
+        <div class="bg-white dark:bg-[#0b1120] p-6 sm:p-8 rounded-lg shadow-lg w-full max-w-md border-t-4 border-blue-600 dark:border-blue-500 border border-transparent dark:border-slate-800">
+            <div class="flex flex-col items-center justify-center mb-6 text-center">
+                <div class="text-lg sm:text-xl font-extrabold tracking-tight select-none">
+                    <span class="text-gray-500 dark:text-gray-400">GRUPO</span> 
+                    <span class="text-red-600 font-black">LIBRAGA BRANDÃO</span>
+                </div>
+                <div class="w-16 h-0.5 bg-red-600 mt-1.5 rounded-full"></div>
+            </div>
+            <h2 class="text-xl font-bold text-center text-blue-600 dark:text-blue-400 mb-2">Controle Patrimonial</h2>
+            <p class="text-xs text-gray-500 dark:text-slate-400 mb-6 text-center" id="status-conexao">Conectando ao banco de dados...</p>
+            
+            <div class="bg-blue-50 dark:bg-blue-900/30 p-3 rounded mb-4 text-xs sm:text-sm text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50">
+                <p class="font-bold mb-1">Contas para teste:</p>
+                <ul class="list-disc pl-5">
+                    <li>Usuário: <b>admin</b> | Senha: <b>1234</b></li>
+                    <li>Usuário: <b>operador</b> | Senha: <b>1234</b></li>
+                </ul>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm font-semibold mb-1 text-gray-700 dark:text-slate-300">Usuário</label>
+                <input type="text" id="login-user" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors" placeholder="admin ou operador">
+            </div>
+            <div class="mb-6">
+                <label class="block text-sm font-semibold mb-1 text-gray-700 dark:text-slate-300">Senha</label>
+                <input type="password" id="login-pass" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white rounded p-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors" placeholder="1234">
+            </div>
+            <button id="btn-login" onclick="fazerLogin()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded transition shadow-md opacity-50 cursor-not-allowed" disabled>
+                Aguardando Conexão...
+            </button>
+        </div>
+    </div>
+
+    <!-- ================= TELA DO SISTEMA ================= -->
+    <div id="tela-sistema" class="hidden h-screen flex flex-col md:flex-row relative overflow-hidden">
+        
+        <!-- HEADER MOBILE -->
+        <header class="md:hidden w-full bg-[#0b1120] text-slate-300 px-4 py-3 flex items-center justify-between border-b border-slate-800 shadow-md z-30">
+            <div class="text-xs font-black tracking-tight flex flex-col">
+                <span class="text-[9px] text-gray-400 font-semibold leading-none">GRUPO</span>
+                <span class="text-red-500 font-extrabold text-sm leading-none mt-1">LIBRAGA BRANDÃO</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span id="badge-perfil-mobile" class="text-[9px] bg-blue-600 px-2 py-0.5 rounded uppercase font-bold text-white">Admin</span>
+                <button onclick="toggleMenuMobile()" class="p-1 focus:outline-none text-slate-300 hover:text-white transition">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path id="hamburger-icon" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                        <path id="close-icon" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- MENU LATERAL -->
+        <aside id="sidebar" class="fixed inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 w-64 sidebar-bg text-slate-300 flex flex-col transition-transform duration-300 ease-in-out border-r border-slate-800 shadow-xl z-40 h-full pt-[52px] md:pt-0">
+            <div class="hidden md:flex p-5 border-b border-slate-800 flex-col items-start gap-1 bg-[#080d1a]">
+                <div class="text-sm font-black tracking-tight select-none flex flex-col">
+                    <span class="text-xs text-gray-400 font-semibold leading-none">GRUPO</span>
+                    <span class="text-red-500 font-extrabold text-base leading-none mt-1">LIBRAGA BRANDÃO</span>
+                </div>
+                <div class="flex justify-between items-center w-full mt-2">
+                    <span id="badge-perfil" class="text-[9px] bg-blue-600 px-2 py-0.5 rounded uppercase tracking-wider text-white font-bold">Admin</span>
+                    <span class="flex items-center text-[10px] text-green-400 font-bold"><span class="w-2 h-2 rounded-full bg-green-400 mr-1 animate-pulse"></span>Online</span>
+                </div>
+            </div>
+            
+            <nav class="flex-1 p-3 space-y-1 overflow-y-auto sidebar-text text-sm font-medium">
+                <button id="menu-dashboard" onclick="mostrarAba('dashboard', this)" class="menu-item flex items-center w-full p-3 rounded-lg bg-blue-500 text-white transition-colors">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+                    Painel de controle
+                </button>
+                <button onclick="mostrarAba('lista', this)" class="menu-item flex items-center w-full p-3 rounded-lg sidebar-hover transition-colors">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+                    Produtos
+                </button>
+                <button onclick="mostrarAba('lojas', this)" class="menu-item flex items-center w-full p-3 rounded-lg sidebar-hover transition-colors">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                    Lojas
+                </button>
+                <button onclick="mostrarAba('estoque', this)" class="menu-item flex items-center w-full p-3 rounded-lg sidebar-hover transition-colors">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                    Estoque
+                </button>
+
+                <!-- NOVO BOTÃO: ABA CONSERTOS -->
+                <button onclick="mostrarAba('consertos', this)" class="menu-item flex items-center w-full p-3 rounded-lg sidebar-hover transition-colors text-orange-400 hover:text-orange-300">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    Em Conserto
+                </button>
+
+                <button onclick="mostrarAba('movimentacao', this)" class="menu-item flex items-center w-full p-3 rounded-lg sidebar-hover transition-colors">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
+                    Transferências (Lote)
+                </button>
+                <button onclick="mostrarAba('historico', this)" class="menu-item flex items-center w-full p-3 rounded-lg sidebar-hover transition-colors">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Histórico
+                </button>
+                <button onclick="mostrarAba('relatorios', this)" class="menu-item flex items-center w-full p-3 rounded-lg sidebar-hover transition-colors">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    Relatórios
+                </button>
+
+                <div class="my-4 border-t border-slate-800"></div>
+
+                <input type="file" id="input-planilha" accept=".xlsx, .xls, .csv" class="hidden" onchange="processarPlanilha(event)">
+                <button id="menu-importar" onclick="acionarImportacao()" class="menu-item flex items-center w-full p-3 rounded-lg sidebar-hover transition-colors">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    Importar Excel
+                </button>
+                <button onclick="exportarCSV()" class="menu-item flex items-center w-full p-3 rounded-lg sidebar-hover transition-colors">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Exportar Completo
+                </button>
+
+                <div class="my-4 border-t border-slate-800"></div>
+                
+                <button id="btn-instalar-app" onclick="instalarPWA()" class="hidden menu-item items-center w-full p-3 rounded-lg bg-green-600/20 text-green-400 hover:bg-green-600/30 transition-colors border border-green-500/30">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Instalar App
+                </button>
+                <button onclick="alert('Módulo de Usuários: Pronto para futura atualização.')" class="menu-item flex items-center w-full p-3 rounded-lg sidebar-hover transition-colors">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                    Usuários
+                </button>
+            </nav>
+
+            <div class="p-4 border-t border-slate-800 bg-[#080d1a] flex flex-col gap-2">
+                <button onclick="alternarTema()" class="w-full flex items-center justify-center p-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors">
+                    <svg id="icone-sol" class="w-5 h-5 hidden mr-2 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                    <svg id="icone-lua" class="w-5 h-5 mr-2 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                    <span id="texto-tema" class="text-sm font-medium">Modo Escuro</span>
+                </button>
+
+                <p class="text-xs text-slate-400 mt-2">Logado como: <br><b id="nome-usuario" class="text-white text-sm">Usuário</b></p>
+                <button onclick="fazerLogout()" class="w-full bg-slate-700 hover:bg-red-600 text-white py-2 rounded-lg text-sm font-bold transition mt-1">Sair da Conta</button>
+            </div>
+        </aside>
+
+        <div id="sidebar-overlay" onclick="toggleMenuMobile()" class="hidden fixed inset-0 bg-black/50 z-35 transition-opacity md:hidden"></div>
+
+        <!-- ÁREA PRINCIPAL -->
+        <main id="main-content" class="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto h-full bg-gray-50 dark:bg-[#0f172a] transition-colors duration-300 relative">
+            
+            <!-- ABA: DASHBOARD -->
+            <div id="aba-dashboard" class="aba-conteudo">
+                <h2 class="text-2xl sm:text-3xl font-bold mb-6 sm:mb-8 text-gray-800 dark:text-white">Painel de controle</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+                    <div class="bg-white dark:bg-[#0b1120] p-5 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 border-l-4 border-l-blue-500">
+                        <h3 class="text-gray-500 dark:text-slate-400 text-xs sm:text-sm font-bold uppercase tracking-wide">Total de Produtos</h3>
+                        <p id="dash-total" class="text-3xl sm:text-4xl font-bold text-gray-800 dark:text-white mt-1 sm:mt-2">0</p>
+                    </div>
+                    <div class="bg-white dark:bg-[#0b1120] p-5 sm:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 border-l-4 border-l-purple-500">
+                        <h3 class="text-gray-500 dark:text-slate-400 text-xs sm:text-sm font-bold uppercase tracking-wide">Lojas Cadastradas</h3>
+                        <p id="dash-lojas" class="text-3xl sm:text-4xl font-bold text-gray-800 dark:text-white mt-1 sm:mt-2">0</p>
+                    </div>
+                    <div class="bg-orange-50 dark:bg-orange-900/10 p-5 sm:p-6 rounded-xl shadow-sm border border-orange-100 dark:border-orange-800/50 border-l-4 border-l-orange-500">
+                        <h3 class="text-orange-600 dark:text-orange-400 text-xs sm:text-sm font-bold uppercase tracking-wide">Em Conserto</h3>
+                        <p id="dash-conserto" class="text-3xl sm:text-4xl font-bold text-orange-700 dark:text-orange-300 mt-1 sm:mt-2">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ABA: CADASTRO COM VERIFICAÇÃO AUTOMÁTICA -->
+            <div id="aba-cadastro" class="aba-conteudo hidden">
+                <div class="flex items-center mb-6">
+                    <button onclick="mostrarAba('lista')" class="mr-4 text-gray-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                    </button>
+                    <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-white">Cadastrar Novo Produto</h2>
+                </div>
+                <form id="form-cadastro" onsubmit="salvarPatrimonio(event)" class="bg-white dark:bg-[#0b1120] p-5 sm:p-8 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 max-w-3xl">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-6">
+                        
+                        <!-- VERIFICAÇÃO AUTOMÁTICA DE PAT E OPÇÃO DE TRANSFERÊNCIA RÁPIDA -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1.5 sm:mb-2">Número PAT (Ou Escaneie)</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="pat" oninput="verificarDisponibilidadePat()" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white p-2.5 sm:p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none uppercase" placeholder="Deixe em branco p/ Gerar">
+                                <button type="button" onclick="abrirScanner('pat', verificarDisponibilidadePat)" class="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg transition flex items-center justify-center shadow-sm" title="Escanear Código de Barras / QR Code">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-4-8v8m8-8v8M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6z"></path></svg>
+                                </button>
+                            </div>
+                            <div id="status-pat-container" class="mt-2 min-h-[24px]"></div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1.5 sm:mb-2">Descrição *</label>
+                            <input type="text" id="descricao" required class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white p-2.5 sm:p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ex: Cadeira de Escritório">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1.5 sm:mb-2">Loja / Localização</label>
+                            <select id="loja" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white p-2.5 sm:p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                                <!-- Preenchido dinamicamente via JS -->
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1.5 sm:mb-2">Responsável</label>
+                            <input type="text" id="responsavel" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white p-2.5 sm:p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Nome do funcionário">
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 sm:py-3 px-8 rounded-lg transition shadow-sm">
+                        Salvar Patrimônio
+                    </button>
+                    <div id="msg-sucesso" class="text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30 p-4 rounded-lg font-bold mt-4 hidden border border-green-200 dark:border-green-800/50 text-sm">
+                        ✅ Patrimônio cadastrado com sucesso!
+                    </div>
+                </form>
+            </div>
+
+            <!-- ABA: LISTA DE PRODUTOS -->
+            <div id="aba-lista" class="aba-conteudo hidden h-full flex flex-col">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                    <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-white">Produtos</h2>
+                    
+                    <div class="flex flex-row flex-wrap gap-2 sm:gap-3 w-full sm:w-auto">
+                        <button id="btn-novo-produto" onclick="abrirCadastroProduto()" class="flex-1 sm:flex-none justify-center bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition shadow-sm text-sm flex items-center">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            Novo
+                        </button>
+                        <button id="btn-excluir-lote" onclick="excluirSelecionados()" class="hidden flex-1 sm:flex-none justify-center bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 font-bold py-2 px-4 rounded-lg transition shadow-sm text-sm border border-red-200 dark:border-red-800/50 flex items-center">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            Excluir
+                        </button>
+                    </div>
+                </div>
+
+                <!-- BARRA DE PESQUISA COM SCANNER -->
+                <div class="mb-4">
+                    <div class="flex gap-2 w-full md:w-[28rem]">
+                        <div class="relative flex-1">
+                            <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                <svg class="w-4 h-4 text-gray-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                            </div>
+                            <input type="text" id="busca-produtos" oninput="buscarProdutos()" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white rounded-lg pl-10 p-2.5 text-sm focus:ring-1 focus:ring-blue-500 outline-none transition-colors" placeholder="Buscar por PAT, Descrição...">
+                        </div>
+                        <button type="button" onclick="abrirScanner('busca-produtos', buscarProdutos)" class="bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded-lg transition flex items-center justify-center shadow-sm" title="Pesquisar por Código de Barras">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-4-8v8m8-8v8M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6z"></path></svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="bg-white dark:bg-[#0b1120] rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden flex-1 flex flex-col h-0">
+                    <div class="overflow-auto flex-1">
+                        <table class="w-full text-left border-collapse min-w-[600px] md:min-w-0">
+                            <thead class="bg-slate-50 dark:bg-[#0f172a] sticky top-0 z-10">
+                                <tr class="text-slate-500 dark:text-slate-300 uppercase text-xs tracking-wider border-b border-gray-100 dark:border-slate-700">
+                                    <th class="p-4 w-10 text-center">
+                                        <input type="checkbox" id="chk-todos" onclick="toggleTodos(this)" class="cursor-pointer hidden w-4 h-4 text-blue-600 rounded border-gray-300 dark:border-slate-600 focus:ring-blue-500 bg-white dark:bg-[#0f172a]">
+                                    </th>
+                                    <th class="p-4 text-xs font-bold">PAT</th>
+                                    <th class="p-4 text-xs font-bold">Descrição</th>
+                                    <th class="p-4 text-xs font-bold">Localização Atual</th>
+                                    <th class="p-4 text-xs font-bold">Responsável Atual</th>
+                                    <th class="p-4 text-center text-xs font-bold">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabela-bens" class="text-sm dark:text-slate-200 divide-y divide-gray-100 dark:divide-slate-800"></tbody>
+                        </table>
+                    </div>
+                    <!-- Rodapé Paginação -->
+                    <div class="p-3 sm:p-4 border-t border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row gap-3 justify-between items-center text-xs sm:text-sm text-gray-500 dark:text-slate-400 bg-gray-50 dark:bg-transparent">
+                        <span id="produtos-total-registros">0 produto(s)</span>
+                        <div class="flex space-x-1" id="produtos-paginacao"></div>
+                        <span id="produtos-info-pagina">Página 1 de 1</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ABA: LOJAS -->
+            <div id="aba-lojas" class="aba-conteudo hidden h-full flex flex-col">
+                <div class="flex flex-col sm:flex-row justify-between items-start mb-6 gap-3">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800 dark:text-white mb-1">Lojas</h2>
+                        <p class="text-xs sm:text-sm text-gray-500 dark:text-slate-400">Cada loja possui seu próprio estoque</p>
+                    </div>
+                    <button id="btn-nova-loja" onclick="abrirModalNovaLoja()" class="w-full sm:w-auto justify-center bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg flex items-center transition text-sm shadow-sm">
+                        <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        Nova Loja
+                    </button>
+                </div>
+
+                <div class="mb-4">
+                    <div class="relative w-full md:w-80">
+                        <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                            <svg class="w-4 h-4 text-gray-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </div>
+                        <input type="text" id="busca-lojas" oninput="buscarLojas()" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white rounded-lg pl-10 p-2.5 text-sm focus:ring-1 focus:ring-blue-500 outline-none transition-colors" placeholder="Pesquisar...">
+                    </div>
+                </div>
+                
+                <div class="bg-white dark:bg-[#0b1120] rounded-lg border border-gray-200 dark:border-slate-800 flex-1 flex flex-col overflow-hidden shadow-sm h-0">
+                    <div class="overflow-auto flex-1">
+                        <table class="w-full text-left border-collapse text-sm min-w-[500px] md:min-w-0">
+                            <thead class="bg-slate-50 dark:bg-[#0f172a] sticky top-0 z-10">
+                                <tr class="text-gray-500 dark:text-slate-400 font-semibold border-b border-gray-200 dark:border-slate-800 text-xs uppercase">
+                                    <th class="p-4">Loja <span class="text-[10px] ml-1">↑↓</span></th>
+                                    <th class="p-4">Cidade <span class="text-[10px] ml-1">↑↓</span></th>
+                                    <th class="p-4">Estado <span class="text-[10px] ml-1">↑↓</span></th>
+                                    <th class="p-4">Produtos <span class="text-[10px] ml-1">↑↓</span></th>
+                                    <th class="p-4">Status <span class="text-[10px] ml-1">↑↓</span></th>
+                                    <th class="p-4 text-center">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabela-lojas" class="text-gray-700 dark:text-slate-200 divide-y border-gray-100 dark:border-slate-800 dark:divide-slate-800"></tbody>
+                        </table>
+                    </div>
+                    <div class="p-3 sm:p-4 border-t border-gray-200 dark:border-slate-800 flex flex-col sm:flex-row gap-3 justify-between items-center text-xs sm:text-sm text-gray-500 dark:text-slate-400 bg-gray-50 dark:bg-[#0b1120]">
+                        <span id="lojas-total-registros">0 registro(s)</span>
+                        <div class="flex space-x-1" id="lojas-paginacao"></div>
+                        <span id="lojas-info-pagina">Página 1 de 1</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ABA: ESTOQUE -->
+            <div id="aba-estoque" class="aba-conteudo hidden h-full flex flex-col">
+                <div class="flex flex-col sm:flex-row justify-between items-start mb-6 gap-3">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800 dark:text-white mb-1">Controle de Estoque</h2>
+                        <p class="text-xs sm:text-sm text-gray-500 dark:text-slate-400">Consolidação automática de quantidades por produto e localização</p>
+                    </div>
+                    <button onclick="exportarEstoqueCSV()" class="w-full sm:w-auto justify-center bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg flex items-center transition text-sm shadow-sm">
+                        <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        Exportar Resumo
+                    </button>
+                </div>
+
+                <div class="mb-4 flex flex-col sm:flex-row gap-3">
+                    <div class="relative w-full md:w-96">
+                        <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                            <svg class="w-4 h-4 text-gray-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </div>
+                        <input type="text" id="busca-estoque-produto" oninput="buscarEstoque()" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white rounded-lg pl-10 p-2.5 text-sm focus:ring-1 focus:ring-blue-500 outline-none transition-colors" placeholder="Filtrar por Produto...">
+                    </div>
+                    <div class="relative w-full md:w-96">
+                        <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                            <svg class="w-4 h-4 text-gray-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                        </div>
+                        <input type="text" id="busca-estoque-loja" oninput="buscarEstoque()" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white rounded-lg pl-10 p-2.5 text-sm focus:ring-1 focus:ring-blue-500 outline-none transition-colors" placeholder="Filtrar por Loja...">
+                    </div>
+                </div>
+                
+                <div class="bg-white dark:bg-[#0b1120] rounded-lg border border-gray-200 dark:border-slate-800 flex-1 flex flex-col overflow-hidden shadow-sm h-0">
+                    <div class="overflow-auto flex-1">
+                        <table class="w-full text-left border-collapse text-sm min-w-[500px] md:min-w-0">
+                            <thead class="bg-slate-50 dark:bg-[#0f172a] sticky top-0 z-10">
+                                <tr class="text-gray-500 dark:text-slate-400 font-semibold border-b border-gray-200 dark:border-slate-800 text-xs uppercase">
+                                    <th class="p-4">Produto / Descrição <span class="text-[10px] ml-1">↑↓</span></th>
+                                    <th class="p-4">Loja / Local <span class="text-[10px] ml-1">↑↓</span></th>
+                                    <th class="p-4 text-center">Quantidade <span class="text-[10px] ml-1">↑↓</span></th>
+                                    <th class="p-4">Status <span class="text-[10px] ml-1">↑↓</span></th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabela-estoque" class="text-gray-700 dark:text-slate-200 divide-y border-gray-100 dark:border-slate-800 dark:divide-slate-800"></tbody>
+                        </table>
+                    </div>
+                    <div class="p-3 sm:p-4 border-t border-gray-200 dark:border-slate-800 flex flex-col sm:flex-row gap-3 justify-between items-center text-xs sm:text-sm text-gray-500 dark:text-slate-400 bg-gray-50 dark:bg-[#0b1120]">
+                        <span id="estoque-total-registros">0 agrupamento(s)</span>
+                        <div class="flex space-x-1" id="estoque-paginacao"></div>
+                        <span id="estoque-info-pagina">Página 1 de 1</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ABA: CONSERTOS / ASSISTÊNCIA TÉCNICA -->
+            <div id="aba-consertos" class="aba-conteudo hidden h-full flex flex-col">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                    <div>
+                        <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-white mb-1">Gestão de Consertos</h2>
+                        <p class="text-xs sm:text-sm text-gray-500 dark:text-slate-400">Controle, histórico e tempo de equipamentos na assistência técnica.</p>
+                    </div>
+                    <button onclick="exportarConsertosPDF()" class="w-full sm:w-auto justify-center bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg flex items-center transition text-sm shadow border border-red-800">
+                        <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                        Exportar PDF
+                    </button>
+                </div>
+
+                <div class="mb-4">
+                    <div class="relative w-full md:w-96">
+                        <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                            <svg class="w-4 h-4 text-gray-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </div>
+                        <input type="text" id="busca-consertos" oninput="renderizarConsertos()" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white rounded-lg pl-10 p-2.5 text-sm focus:ring-1 focus:ring-blue-500 outline-none transition-colors" placeholder="Buscar por PAT ou Descrição...">
+                    </div>
+                </div>
+                
+                <div class="bg-white dark:bg-[#0b1120] rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden flex-1 flex flex-col h-0">
+                    <div class="overflow-auto flex-1">
+                        <table class="w-full text-left border-collapse min-w-[700px] md:min-w-0">
+                            <thead class="bg-slate-50 dark:bg-[#0f172a] sticky top-0 z-10">
+                                <tr class="text-slate-500 dark:text-slate-300 uppercase text-xs tracking-wider border-b border-gray-100 dark:border-slate-700">
+                                    <th class="p-4 text-xs font-bold w-32">PAT</th>
+                                    <th class="p-4 text-xs font-bold">Descrição</th>
+                                    <th class="p-4 text-xs font-bold">Responsável/Local</th>
+                                    <th class="p-4 text-xs font-bold text-center">Idas ao Conserto</th>
+                                    <th class="p-4 text-xs font-bold">Tempo Atual</th>
+                                    <th class="p-4 text-center text-xs font-bold w-32">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabela-consertos" class="text-sm dark:text-slate-200 divide-y divide-gray-100 dark:divide-slate-800">
+                                <!-- Preenchido dinamicamente via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ABA: TRANSFERÊNCIAS EM LOTE -->
+            <div id="aba-movimentacao" class="aba-conteudo hidden">
+                <h2 class="text-2xl sm:text-3xl font-bold mb-6 sm:mb-8 text-gray-800 dark:text-white">Transferências (Modo Lote)</h2>
+                
+                <div class="bg-white dark:bg-[#0b1120] p-5 sm:p-8 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 max-w-4xl mb-8">
+                    
+                    <div class="mb-6">
+                        <label class="block text-sm font-bold text-gray-700 dark:text-slate-300 mb-2">1. Adicione os produtos à lista (PAT):</label>
+                        <div class="flex gap-2">
+                            <div class="relative flex-1">
+                                <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                </div>
+                                <input type="text" id="mov-patrimonio" onkeydown="if(event.key==='Enter') adicionarAoLoteManual()" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-blue-700 dark:text-blue-400 p-3 pl-10 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none uppercase font-semibold transition-colors" placeholder="Ex: S/N-4521 e aperte Enter">
+                            </div>
+                            <button type="button" onclick="abrirScanner('mov-patrimonio', adicionarAoLoteScanner)" class="bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 p-3 rounded-lg transition flex items-center justify-center shadow-sm" title="Escanear Código">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-4-8v8m8-8v8M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6z"></path></svg>
+                            </button>
+                            <button type="button" onclick="adicionarAoLoteManual()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-3 rounded-lg transition shadow-sm">
+                                Adicionar
+                            </button>
+                        </div>
+                        <p id="mov-produto-desc" class="text-xs sm:text-sm font-bold mt-2 min-h-[20px] text-gray-500 dark:text-slate-400 text-ellipsis overflow-hidden">Pronto para ler códigos...</p>
+                    </div>
+
+                    <div class="mb-8 border border-dashed border-gray-300 dark:border-slate-700 p-4 rounded-xl bg-gray-50 dark:bg-[#0f172a]/50">
+                        <div class="flex justify-between items-center mb-3">
+                            <h4 class="text-sm font-bold text-gray-700 dark:text-slate-300">Itens no Lote: <span id="lote-count" class="bg-blue-600 text-white px-2 py-0.5 rounded text-xs ml-1">0</span></h4>
+                            <button onclick="limparLote()" class="text-xs text-red-500 hover:text-red-700 font-semibold underline">Limpar Lista</button>
+                        </div>
+                        <ul id="lista-lote" class="space-y-2 max-h-48 overflow-y-auto pr-2 empty:hidden"></ul>
+                        <div id="lista-lote-vazia" class="text-center text-sm text-gray-400 dark:text-slate-500 py-4 italic">Nenhum produto adicionado para transferência.</div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 dark:text-slate-300 mb-2">2. Localização de Destino</label>
+                            <select id="mov-novo-local" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white font-medium p-2.5 sm:p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-colors text-sm">
+                                <!-- Preenchido via JS -->
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 dark:text-slate-300 mb-2">3. Observação / Novo Responsável</label>
+                            <input type="text" id="mov-novo-resp" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white p-2.5 sm:p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-colors text-sm" placeholder="Ex: Nome da Assistência ou Funcionário">
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col md:flex-row gap-3">
+                        <button type="button" id="btn-transf-normal" onclick="executarAcaoTransferenciaLote('TRANSFERENCIA')" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 sm:py-3 px-4 rounded-lg transition shadow-sm opacity-50 cursor-not-allowed" disabled>
+                            Transferir Todos
+                        </button>
+                        <button type="button" id="btn-transf-conserto" onclick="executarAcaoTransferenciaLote('CONSERTO')" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-2.5 sm:py-3 px-4 rounded-lg transition shadow-sm opacity-50 cursor-not-allowed" disabled>
+                            Enviar Todos p/ Conserto
+                        </button>
+                        <button type="button" id="btn-transf-retorno" onclick="executarAcaoTransferenciaLote('RETORNO')" class="w-full hidden bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 sm:py-3 px-4 rounded-lg transition shadow-sm opacity-50 cursor-not-allowed" disabled>
+                            Retorno de Conserto (Lote)
+                        </button>
+                    </div>
+                    <div id="msg-sucesso-mov" class="text-white p-4 rounded-lg font-bold mt-6 hidden border text-sm text-center"></div>
+                </div>
+            </div>
+
+            <!-- ABA: RELATÓRIOS (POR LOJA) -->
+            <div id="aba-relatorios" class="aba-conteudo hidden h-full flex flex-col">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800 dark:text-white mb-1">Relatórios por Loja</h2>
+                        <p class="text-xs sm:text-sm text-gray-500 dark:text-slate-400">Filtre e exporte os itens individuais de cada filial em CSV ou PDF.</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2 w-full sm:w-auto">
+                        <button onclick="exportarRelatorioAtual()" class="flex-1 sm:flex-none justify-center bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center transition text-xs sm:text-sm shadow-sm">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            <span id="btn-exportar-texto">CSV (Todas)</span>
+                        </button>
+                        <button onclick="exportarRelatorioAtualPDF()" class="flex-1 sm:flex-none justify-center bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center transition text-xs sm:text-sm shadow border border-red-800">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                            <span id="btn-exportar-pdf-texto">PDF (Todas)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <label class="block text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">Selecione a Filial</label>
+                    <select id="relatorio-loja-select" onchange="renderizarRelatorios()" class="w-full md:w-96 bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white rounded-lg p-2.5 text-sm focus:ring-1 focus:ring-blue-500 outline-none font-semibold cursor-pointer transition-colors">
+                        <!-- Preenchido via JS -->
+                    </select>
+                </div>
+
+                <div id="container-relatorios" class="flex-1 overflow-y-auto space-y-6 pb-6 pr-1"></div>
+            </div>
+
+            <!-- ABA: HISTÓRICO GERAL E FILTROS -->
+            <div id="aba-historico" class="aba-conteudo hidden h-full flex flex-col">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+                    <div>
+                        <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-white mb-1">Histórico de Movimentações</h2>
+                        <p class="text-xs sm:text-sm text-gray-500 dark:text-slate-400">Auditoria completa de transferências, importações e exclusões</p>
+                    </div>
+                    
+                    <div class="flex flex-wrap gap-2 w-full sm:w-auto">
+                        <button id="btn-excluir-historico-lote" onclick="excluirHistoricoSelecionados()" class="hidden flex-1 sm:flex-none justify-center bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-800 text-red-700 dark:text-red-200 font-bold py-2 px-3 sm:px-4 rounded-lg transition shadow border border-red-200 dark:border-red-800/50 flex items-center text-xs sm:text-sm">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            Apagar
+                        </button>
+                        
+                        <button id="btn-limpar-historico" onclick="limparTodoHistorico()" class="hidden flex-1 sm:flex-none justify-center bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-3 sm:px-4 rounded-lg transition shadow flex items-center text-xs sm:text-sm">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            Limpar Tudo
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-white dark:bg-[#0b1120] p-4 rounded-xl border border-gray-200 dark:border-slate-800 mb-6 flex flex-col md:flex-row gap-4 items-stretch md:items-end justify-between shadow-sm transition-colors">
+                    <div class="flex flex-row gap-2 w-full md:w-auto">
+                        <div class="flex-1 md:flex-initial">
+                            <label class="block text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-1">Mês</label>
+                            <select id="filtro-mes-historico" onchange="mudarPaginaHistorico(1)" class="w-full bg-gray-50 dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white rounded-lg p-2 text-xs sm:text-sm focus:ring-1 focus:ring-blue-500 outline-none md:w-40 font-semibold cursor-pointer transition-colors h-[38px]">
+                                <option value="">Todos</option>
+                                <option value="01">Janeiro</option> <option value="02">Fevereiro</option> <option value="03">Março</option> <option value="04">Abril</option> <option value="05">Maio</option> <option value="06">Junho</option> <option value="07">Julho</option> <option value="08">Agosto</option> <option value="09">Setembro</option> <option value="10">Outubro</option> <option value="11">Novembro</option> <option value="12">Dezembro</option>
+                            </select>
+                        </div>
+                        <div class="flex-1 md:flex-initial">
+                            <label class="block text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-1">Ano</label>
+                            <select id="filtro-ano-historico" onchange="mudarPaginaHistorico(1)" class="w-full bg-gray-50 dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white rounded-lg p-2 text-xs sm:text-sm focus:ring-1 focus:ring-blue-500 outline-none md:w-32 font-semibold cursor-pointer transition-colors h-[38px]">
+                                <option value="">Todos</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-2 w-full md:w-auto">
+                        <button onclick="exportarHistoricoCSV()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-3 sm:px-4 rounded-lg flex items-center justify-center transition text-xs sm:text-sm flex-1 md:flex-none shadow-sm h-[38px]">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            CSV
+                        </button>
+                        <button onclick="exportarHistoricoPDF()" class="bg-red-600 hover:bg-red-700 text-white font-medium py-2.5 px-3 sm:px-4 rounded-lg flex items-center justify-center transition text-xs sm:text-sm border border-red-800 flex-1 md:flex-none shadow h-[38px]">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                            PDF
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="bg-white dark:bg-[#0b1120] rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden flex-1 flex flex-col transition-colors h-0">
+                    <div class="overflow-auto flex-1">
+                        <table class="w-full text-left border-collapse text-sm min-w-[650px] md:min-w-0">
+                            <thead class="bg-slate-50 dark:bg-[#0f172a] sticky top-0 transition-colors z-10">
+                                <tr class="text-gray-500 dark:text-slate-400 uppercase text-xs tracking-wider border-b border-gray-100 dark:border-slate-800">
+                                    <th class="p-4 w-10 text-center">
+                                        <input type="checkbox" id="chk-todos-historico" onclick="toggleTodosHistorico(this)" class="cursor-pointer hidden w-4 h-4 text-blue-600 rounded border-gray-300 dark:border-slate-600 bg-white dark:bg-[#0f172a] focus:ring-blue-500">
+                                    </th>
+                                    <th class="p-4">Data / Hora</th>
+                                    <th class="p-4">Produto (PAT)</th>
+                                    <th class="p-4">De (Origem)</th>
+                                    <th class="p-4">Para (Destino)</th>
+                                    <th class="p-4">Responsável Anterior</th>
+                                    <th class="p-4">Novo Responsável</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabela-historico" class="text-gray-700 dark:text-slate-200 divide-y border-gray-100 dark:border-slate-800 dark:divide-slate-800"></tbody>
+                        </table>
+                    </div>
+                    <div class="p-3 sm:p-4 border-t border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row gap-3 justify-between items-center text-xs sm:text-sm text-gray-500 dark:text-slate-400 bg-gray-50 dark:bg-[#0b1120] transition-colors">
+                        <span id="historico-total-registros">0 registro(s)</span>
+                        <div class="flex space-x-1" id="historico-paginacao"></div>
+                        <span id="historico-info-pagina">Página 1 de 1</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================= MODAIS ================= -->
+
+            <!-- MODAL LOJA -->
+            <div id="modal-loja" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+                <div class="bg-white dark:bg-[#0b1120] border border-gray-200 dark:border-slate-800 rounded-xl p-5 sm:p-6 w-full max-w-md shadow-2xl transition-colors">
+                    <h3 id="modal-loja-titulo" class="text-lg sm:text-xl font-bold text-gray-800 dark:text-white mb-4">Adicionar Nova Loja</h3>
+                    <input type="hidden" id="loja-original-nome" value="">
+                    <div class="space-y-4 text-xs sm:text-sm text-gray-700 dark:text-slate-300">
+                        <div>
+                            <label class="block mb-1 font-semibold">Nome da Loja</label>
+                            <input type="text" id="nova-loja-nome" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white rounded p-2 sm:p-2.5 outline-none focus:ring-1 focus:ring-blue-500 transition-colors" placeholder="Ex: ESTOQUE LOJA 15">
+                        </div>
+                        <div>
+                            <label class="block mb-1 font-semibold">Cidade</label>
+                            <input type="text" id="nova-loja-cidade" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white rounded p-2 sm:p-2.5 outline-none focus:ring-1 focus:ring-blue-500 transition-colors" placeholder="Ex: SANTA MARIA">
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block mb-1 font-semibold">Estado</label>
+                                <input type="text" id="nova-loja-estado" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white rounded p-2 sm:p-2.5 outline-none focus:ring-1 focus:ring-blue-500 transition-colors" placeholder="Ex: RS">
+                            </div>
+                            <div id="container-loja-status" class="hidden">
+                                <label class="block mb-1 font-semibold">Status</label>
+                                <select id="nova-loja-status" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white rounded p-2 sm:p-2.5 outline-none focus:ring-1 focus:ring-blue-500 font-semibold transition-colors">
+                                    <option value="Ativa" class="text-green-600 dark:text-green-500">Ativa</option>
+                                    <option value="Inativa" class="text-red-600 dark:text-red-500">Inativa</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end gap-3">
+                        <button onclick="fecharModalLoja()" class="px-4 py-2 rounded text-xs sm:text-sm text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 border border-gray-300 dark:border-slate-700 transition-colors">Cancelar</button>
+                        <button onclick="salvarLoja()" class="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition text-xs sm:text-sm">Salvar Loja</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODAL EDIÇÃO DE PRODUTO -->
+            <div id="modal-produto" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+                <div class="bg-white dark:bg-[#0b1120] border border-gray-200 dark:border-slate-800 rounded-xl p-5 sm:p-6 w-full max-w-md shadow-2xl transition-colors">
+                    <h3 class="text-lg sm:text-xl font-bold text-gray-800 dark:text-white mb-4">Editar Produto</h3>
+                    <input type="hidden" id="edit-produto-pat-original">
+                    
+                    <div class="space-y-4 text-xs sm:text-sm text-gray-700 dark:text-slate-300">
+                        <div>
+                            <label class="block mb-1 font-semibold">PAT (Apenas Leitura)</label>
+                            <input type="text" id="edit-produto-pat" readonly class="w-full bg-gray-100 dark:bg-slate-800 border border-transparent text-gray-500 dark:text-slate-400 rounded p-2 sm:p-2.5 outline-none cursor-not-allowed transition-colors font-bold">
+                        </div>
+                        <div>
+                            <label class="block mb-1 font-semibold">Descrição</label>
+                            <input type="text" id="edit-produto-descricao" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white rounded p-2 sm:p-2.5 outline-none focus:ring-1 focus:ring-blue-500 transition-colors">
+                        </div>
+                        <div>
+                            <label class="block mb-1 font-semibold">Loja / Localização</label>
+                            <select id="edit-produto-loja" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white rounded p-2 sm:p-2.5 outline-none focus:ring-1 focus:ring-blue-500 transition-colors">
+                                <!-- Preenchido via JS -->
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block mb-1 font-semibold">Responsável</label>
+                            <input type="text" id="edit-produto-responsavel" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white rounded p-2 sm:p-2.5 outline-none focus:ring-1 focus:ring-blue-500 transition-colors">
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6 flex justify-end gap-3">
+                        <button onclick="fecharModalProduto()" class="px-4 py-2 rounded text-xs sm:text-sm text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 border border-gray-300 dark:border-slate-700 transition-colors">Cancelar</button>
+                        <button onclick="salvarEdicaoProduto()" class="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition text-xs sm:text-sm">Salvar Alterações</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODAL RETORNO DE CONSERTO INDIVIDUAL -->
+            <div id="modal-retorno-individual" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+                <div class="bg-white dark:bg-[#0b1120] border border-gray-200 dark:border-slate-800 rounded-xl p-5 sm:p-6 w-full max-w-md shadow-2xl transition-colors">
+                    <h3 class="text-lg sm:text-xl font-bold text-gray-800 dark:text-white mb-2">Retornar do Conserto</h3>
+                    <p id="texto-retorno-pat" class="text-sm text-gray-600 dark:text-slate-400 mb-5"></p>
+                    <input type="hidden" id="retorno-pat-input">
+                    
+                    <div class="space-y-4 text-xs sm:text-sm text-gray-700 dark:text-slate-300">
+                        <div>
+                            <label class="block mb-1 font-semibold text-gray-800 dark:text-slate-200">Destino (Loja/Local)</label>
+                            <select id="retorno-destino" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white rounded p-2.5 sm:p-3 outline-none focus:ring-1 focus:ring-emerald-500 transition-colors font-medium">
+                                <!-- Preenchido via JS -->
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block mb-1 font-semibold text-gray-800 dark:text-slate-200">Observação / Novo Responsável</label>
+                            <input type="text" id="retorno-obs" class="w-full bg-white dark:bg-[#0f172a] border border-gray-300 dark:border-slate-700 text-gray-800 dark:text-white rounded p-2.5 sm:p-3 outline-none focus:ring-1 focus:ring-emerald-500 transition-colors" placeholder="Ex: Tela trocada. Resp: João">
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6 flex justify-end gap-3">
+                        <button onclick="fecharModalRetorno()" class="px-4 py-2.5 rounded text-xs sm:text-sm font-semibold text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 border border-gray-300 dark:border-slate-700 transition-colors">Cancelar</button>
+                        <button onclick="confirmarRetornoIndividual()" class="px-5 py-2.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition text-xs sm:text-sm shadow-sm flex items-center">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                            Confirmar Retorno
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODAL LEITOR QR/BARCODE -->
+            <div id="modal-scanner" class="hidden fixed inset-0 bg-black/90 flex flex-col items-center justify-center z-[70] p-4">
+                <div class="w-full max-w-md bg-white dark:bg-[#0b1120] rounded-xl overflow-hidden shadow-2xl flex flex-col border border-gray-200 dark:border-slate-800">
+                    <div class="p-4 border-b border-gray-200 dark:border-slate-800 flex justify-between items-center bg-gray-50 dark:bg-[#0f172a]">
+                        <h3 class="text-lg font-bold text-gray-800 dark:text-white">Escanear Código</h3>
+                        <button onclick="fecharScanner()" class="text-gray-500 dark:text-slate-400 hover:text-red-500 transition">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+                    </div>
+                    <div id="reader" class="w-full bg-black flex items-center justify-center" style="min-height: 300px;"></div>
+                    <div class="p-4 text-center text-sm text-gray-500 dark:text-slate-400 bg-gray-50 dark:bg-[#0f172a]">
+                        Aponte a câmera para o Código de Barras ou QR Code. Zeros à esquerda serão ignorados.
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- ================= LÓGICA DO FIREBASE E DO SISTEMA ================= -->
+    <script>
+        // ================= INSTALAÇÃO PWA (APP INSTALÁVEL) =================
+        const manifest = {
+            "name": "Controle Patrimonial - GRUPO LIBRAGA BRANDÃO",
+            "short_name": "Patrimônio",
+            "start_url": ".",
+            "display": "standalone",
+            "background_color": "#0f172a",
+            "theme_color": "#0b1120",
+            "icons": [{ "src": "https://cdn-icons-png.flaticon.com/512/3203/3203071.png", "sizes": "512x512", "type": "image/png" }]
+        };
+        const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+        document.getElementById('pwa-manifest').href = URL.createObjectURL(manifestBlob);
+
+        if ('serviceWorker' in navigator) {
+            const swCode = `
+                const CACHE_NAME = 'patrimonio-lb-v2';
+                const ASSETS = [
+                    './',
+                    'https://cdn.tailwindcss.com',
+                    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+                    'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+                    'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js',
+                    'https://unpkg.com/html5-qrcode',
+                    'https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js',
+                    'https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js'
+                ];
+                self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))); self.skipWaiting(); });
+                self.addEventListener('activate', (e) => { e.waitUntil(clients.claim()); });
+                self.addEventListener('fetch', (e) => { e.respondWith(caches.match(e.request).then((cachedResponse) => { return cachedResponse || fetch(e.request); })); });
+            `;
+            const swBlob = new Blob([swCode], {type: 'application/javascript'});
+            navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(err => console.log("SW Error", err));
+        }
+
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault(); deferredPrompt = e;
+            document.getElementById('btn-instalar-app').classList.remove('hidden'); document.getElementById('btn-instalar-app').classList.add('flex');
+        });
+        function instalarPWA() { if(deferredPrompt) { deferredPrompt.prompt(); deferredPrompt.userChoice.then((c) => { if (c.outcome === 'accepted') { document.getElementById('btn-instalar-app').classList.add('hidden'); document.getElementById('btn-instalar-app').classList.remove('flex'); } deferredPrompt = null; }); } }
+
+        // ================= CONFIGURAÇÃO DO FIREBASE =================
+        const firebaseConfig = {
+            apiKey: "AIzaSyAHaZy7lCLb1qpuTRbMMiAAB5o_FUhW__g",
+            authDomain: "controle-patrimonial-lb.firebaseapp.com",
+            databaseURL: "https://controle-patrimonial-lb-default-rtdb.firebaseio.com",
+            projectId: "controle-patrimonial-lb",
+            storageBucket: "controle-patrimonial-lb.firebasestorage.app",
+            messagingSenderId: "433548070462",
+            appId: "1:433548070462:web:18315c9b0c1de9e3a2cb6f"
+        };
+        
+        let db = null;
+        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+        db = firebase.database();
+
+        let usuarioLogado = null;
+        const ITENS_POR_PAGINA = 20;
+        let paginaAtualLojas = 1, paginaAtualEstoque = 1, paginaAtualProdutos = 1, paginaAtualHistorico = 1;
+        
+        let dadosLojas = []; let dadosPatrimonios = []; let dadosHistorico = [];
+        const lojasDefault = [ { nome: "ESTOQUE CA", cidade: "SANTA MARIA", estado: "RS", status: "Ativa" }, { nome: "BAIXAS MAT. PATRIMÔNIO CA", cidade: "SANTA MARIA", estado: "RS", status: "Ativa" } ];
+
+        // ================= MÓDULO OFFLINE (FILA NO LOCALSTORAGE) =================
+        function registrarTransferenciaOffline(payload) {
+            let fila = JSON.parse(localStorage.getItem('filaTransferenciasLB') || '[]');
+            fila.push({ id: Date.now(), acao: 'TRANSFERENCIA_LOTE', payload: payload });
+            localStorage.setItem('filaTransferenciasLB', JSON.stringify(fila));
+            atualizarBadgeOffline(fila.length);
+        }
+
+        function sincronizarFilaOffline() {
+            if (!navigator.onLine) return;
+            let fila = JSON.parse(localStorage.getItem('filaTransferenciasLB') || '[]');
+            if (fila.length === 0) return;
+            
+            let lista = obterBensSalvos(); let h = obterHistorico(); let houveAlteracao = false;
+            fila.forEach(item => {
+                if (item.acao === 'TRANSFERENCIA_LOTE') {
+                    const p = item.payload;
+                    p.bens.forEach(bemLote => {
+                        let idx = lista.findIndex(b => b.pat === bemLote.pat);
+                        if(idx !== -1) {
+                            lista[idx].loja = p.destinoLocal; lista[idx].responsavel = p.respFinal;
+                            h.push({ data: p.dataAcao, pat: lista[idx].pat, origem: bemLote.lojaAntiga, destino: p.destinoHistorico, resp_anterior: bemLote.respAntigo, resp_novo: p.respFinal });
+                            houveAlteracao = true;
+                        }
+                    });
+                }
+            });
+
+            if (houveAlteracao) {
+                salvarHistoricoNoBanco(h); salvarBensNoBanco(lista);
+                localStorage.removeItem('filaTransferenciasLB'); atualizarBadgeOffline(0);
+                alert("✅ Conexão restabelecida! As transferências offline foram sincronizadas."); atualizarTelas();
+            }
+        }
+
+        function atualizarBadgeOffline(qtd) {
+            const status = document.getElementById('status-conexao');
+            if (!status) return;
+            if (qtd > 0) { status.innerHTML = `⚠️ Sem Internet. ${qtd} pendente(s) na fila.`; status.className = 'text-xs mb-6 text-center text-orange-500 font-bold'; } 
+            else if (navigator.onLine) { status.innerHTML = "✅ Sistema Conectado à Nuvem"; status.className = 'text-xs mb-6 text-center text-green-600 font-bold'; } 
+            else { status.innerHTML = "❌ Sem conexão (0 pendentes)"; status.className = 'text-xs mb-6 text-center text-red-500 font-bold'; }
+        }
+
+        window.addEventListener('online', sincronizarFilaOffline);
+        window.addEventListener('offline', () => { atualizarBadgeOffline(JSON.parse(localStorage.getItem('filaTransferenciasLB') || '[]').length); });
+        window.addEventListener('load', () => { setTimeout(sincronizarFilaOffline, 3000); });
+
+        // ================= SINCRONIZAÇÃO INICIAL =================
+        if (db) {
+            document.getElementById('btn-login').innerText = "Entrar no Sistema"; document.getElementById('btn-login').disabled = false; document.getElementById('btn-login').classList.remove('opacity-50', 'cursor-not-allowed');
+            atualizarBadgeOffline(JSON.parse(localStorage.getItem('filaTransferenciasLB') || '[]').length);
+            db.ref('lojas').on('value', (snapshot) => { if(snapshot.exists()) { dadosLojas = snapshot.val(); } else { dadosLojas = lojasDefault; db.ref('lojas').set(lojasDefault); } atualizarTelas(); });
+            db.ref('patrimonios').on('value', (snapshot) => { dadosPatrimonios = snapshot.val() || []; atualizarTelas(); });
+            db.ref('movimentacoes').on('value', (snapshot) => { dadosHistorico = snapshot.val() || []; atualizarTelas(); });
+        }
+
+        function obterLojas() { return dadosLojas || []; } function obterBensSalvos() { return dadosPatrimonios || []; } function obterHistorico() { return dadosHistorico || []; }
+        function limparObjeto(obj) { return JSON.parse(JSON.stringify(obj)); }
+        function salvarBensNoBanco(lista) { dadosPatrimonios = lista; if(db) db.ref('patrimonios').set(limparObjeto(lista)); }
+        function salvarLojasNoBanco(lista) { dadosLojas = lista; if(db) db.ref('lojas').set(limparObjeto(lista)); }
+        function salvarHistoricoNoBanco(historico) { dadosHistorico = historico; if(db) db.ref('movimentacoes').set(limparObjeto(historico)); }
+
+        // ================= FUNÇÕES DE NAVEGAÇÃO E LISTAGEM DE LOJAS ================= //
+        function carregarOpcoesLojasCadastro() { 
+            const s = document.getElementById('loja'); 
+            s.innerHTML = ''; 
+            obterLojas().forEach(l => { 
+                if(l.status === 'Ativa') s.innerHTML += `<option value="${l.nome}">${l.nome}</option>`; 
+            }); 
+        }
+
+        function abrirCadastroProduto() { 
+            carregarOpcoesLojasCadastro(); 
+            mostrarAba('cadastro'); 
+        }
+
+        function carregarOpcoesLojasMovimentacao() { 
+            const s = document.getElementById('mov-novo-local'); 
+            if(!s) return;
+            s.innerHTML = '<option value="">-- Destino --</option>'; 
+            obterLojas().forEach(l => { 
+                if(l.status === 'Ativa' && l.nome !== 'EM CONSERTO') s.innerHTML += `<option value="${l.nome}">${l.nome}</option>`; 
+            }); 
+        }
+
+        // ================= CONTROLES GERAIS E TEMA ================= 
+        let html5QrCode;
+        function abrirScanner(targetInputId, callback = null) {
+            document.getElementById('modal-scanner').classList.remove('hidden'); html5QrCode = new Html5Qrcode("reader");
+            html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, (dText, dRes) => { let t = dText.replace(/^0+/, ''); if(t === '') t = '0'; document.getElementById(targetInputId).value = t; fecharScanner(); if(callback) callback(); }, (err) => { }).catch((err) => { alert("Erro ao acessar a câmera."); fecharScanner(); });
+        }
+        function fecharScanner() { document.getElementById('modal-scanner').classList.add('hidden'); if (html5QrCode) { html5QrCode.stop().then(() => html5QrCode.clear()).catch(err => console.log(err)); } }
+
+        function inicializarTema() { const t = localStorage.getItem('tema'); const h = document.documentElement; if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) { h.classList.add('dark'); } else { h.classList.remove('dark'); } atualizarBotaoTema(); verificarLogin(); }
+        function alternarTema() { const h = document.documentElement; if (h.classList.contains('dark')) { h.classList.remove('dark'); localStorage.setItem('tema', 'light'); } else { h.classList.add('dark'); localStorage.setItem('tema', 'dark'); } atualizarBotaoTema(); }
+        function atualizarBotaoTema() { const d = document.documentElement.classList.contains('dark'); const iS = document.getElementById('icone-sol'); const iL = document.getElementById('icone-lua'); const tT = document.getElementById('texto-tema'); if (iS && iL && tT) { if (d) { iS.classList.remove('hidden'); iL.classList.add('hidden'); tT.innerText = 'Modo Claro'; } else { iS.classList.add('hidden'); iL.classList.remove('hidden'); tT.innerText = 'Modo Escuro'; } } }
+        inicializarTema();
+
+        function toggleMenuMobile() { const s = document.getElementById('sidebar'); const o = document.getElementById('sidebar-overlay'); const iH = document.getElementById('hamburger-icon'); const iC = document.getElementById('close-icon'); if (s.classList.contains('-translate-x-full')) { s.classList.remove('-translate-x-full'); o.classList.remove('hidden'); iH.classList.add('hidden'); iC.classList.remove('hidden'); } else { s.classList.add('-translate-x-full'); o.classList.add('hidden'); iH.classList.remove('hidden'); iC.classList.add('hidden'); } }
+        function renderizarControlesPaginacao(tP, pA, cId, fN) { const c = document.getElementById(cId); if (!c) return; c.innerHTML = ''; if (tP <= 1) return; const bB = "w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded border transition text-xs sm:text-sm focus:outline-none"; const bD = "opacity-50 cursor-not-allowed border-gray-200 dark:border-slate-800 text-gray-400 dark:text-slate-600 bg-gray-50 dark:bg-transparent"; const bI = "border-gray-200 dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-slate-800 text-gray-600 dark:text-slate-300 bg-white dark:bg-transparent"; const bA = "bg-blue-600 text-white border-blue-600"; c.innerHTML += `<button onclick="${fN}(${pA - 1})" ${pA === 1 ? 'disabled' : ''} class="${bB} ${pA === 1 ? bD : bI}">&laquo;</button>`; let i = Math.max(1, pA - 1); let f = Math.min(tP, i + 2); if (f - i < 2) i = Math.max(1, f - 2); for (let j = i; j <= f; j++) { c.innerHTML += `<button onclick="${fN}(${j})" class="${bB} ${j === pA ? bA : bI}">${j}</button>`; } c.innerHTML += `<button onclick="${fN}(${pA + 1})" ${pA === tP ? 'disabled' : ''} class="${bB} ${pA === tP ? bD : bI}">&raquo;</button>`; }
+
+        function verificarLogin() { const s = localStorage.getItem('usuarioLogadoLocal'); if (s) { usuarioLogado = JSON.parse(s); document.getElementById('tela-login').classList.add('hidden'); document.getElementById('tela-sistema').classList.remove('hidden'); document.getElementById('nome-usuario').innerText = usuarioLogado.nome; const b = document.getElementById('badge-perfil'); const bM = document.getElementById('badge-perfil-mobile'); b.innerText = usuarioLogado.perfil; bM.innerText = usuarioLogado.perfil; const bC = usuarioLogado.perfil === 'ADMIN' ? 'text-[9px] bg-blue-600 px-2 py-0.5 rounded uppercase tracking-wider text-white font-bold' : 'text-[9px] bg-gray-500 px-2 py-0.5 rounded uppercase tracking-wider text-white font-bold'; b.className = bC; bM.className = bC; aplicarPermissoesDePerfil(); mostrarAba('dashboard', document.getElementById('menu-dashboard')); } }
+        function fazerLogin() { if(!db) return alert("Aguarde a conexão com o banco..."); const u = document.getElementById('login-user').value.trim().toLowerCase(); const p = document.getElementById('login-pass').value.trim(); if (u === 'admin' && p === '1234') { usuarioLogado = { nome: 'Administrador', perfil: 'ADMIN' }; } else if (u === 'operador' && p === '1234') { usuarioLogado = { nome: 'Operador Silva', perfil: 'OPERADOR' }; } else { return alert("Usuário/senha incorretos!"); } localStorage.setItem('usuarioLogadoLocal', JSON.stringify(usuarioLogado)); verificarLogin(); }
+        function fazerLogout() { localStorage.removeItem('usuarioLogadoLocal'); location.reload(); }
+        function aplicarPermissoesDePerfil() { const e = ['btn-novo-produto', 'menu-importar', 'btn-excluir-lote', 'chk-todos', 'btn-nova-loja', 'btn-excluir-historico-lote', 'chk-todos-historico', 'btn-limpar-historico']; e.forEach(id => { const el = document.getElementById(id); if(el) usuarioLogado.perfil === 'OPERADOR' ? el.classList.add('hidden') : el.classList.remove('hidden'); }); }
+
+        function mostrarAba(nA, eB = null) {
+            if (nA === 'cadastro' && usuarioLogado.perfil === 'OPERADOR') return alert("Acesso Negado.");
+            const s = document.getElementById('sidebar'); if(!s.classList.contains('-translate-x-full') && window.innerWidth < 768) toggleMenuMobile();
+            document.querySelectorAll('.aba-conteudo').forEach(a => a.classList.add('hidden')); document.getElementById('aba-' + nA).classList.remove('hidden');
+            if (eB) { document.querySelectorAll('.menu-item').forEach(b => { b.classList.remove('bg-blue-500', 'text-white', 'bg-orange-500'); if(b.innerText.includes('Em Conserto')) b.classList.add('text-orange-400'); else b.classList.add('sidebar-text', 'sidebar-hover'); }); eB.classList.add(nA === 'consertos' ? 'bg-orange-500' : 'bg-blue-500', 'text-white'); eB.classList.remove('sidebar-text', 'sidebar-hover', 'text-orange-400'); }
+            if(nA === 'dashboard') atualizarDashboard(); if(nA === 'lista') { paginaAtualProdutos = 1; carregarTabela(); } if(nA === 'lojas') { paginaAtualLojas = 1; renderizarLojas(); } if(nA === 'estoque') { paginaAtualEstoque = 1; renderizarEstoque(); } if(nA === 'relatorios') { carregarOpcoesRelatorio(); renderizarRelatorios(); } if(nA === 'movimentacao') { carregarOpcoesLojasMovimentacao(); renderizarLote(); } if(nA === 'historico') { paginaAtualHistorico = 1; carregarFiltroAnosHistorico(); carregarTabelaHistorico(); } if(nA === 'consertos') { renderizarConsertos(); }
+        }
+
+        function atualizarTelas() {
+            if (!usuarioLogado || document.getElementById('tela-sistema').classList.contains('hidden')) return;
+            carregarTabela(); atualizarDashboard(); renderizarLojas(); renderizarEstoque(); carregarTabelaHistorico(); carregarOpcoesLojasCadastro(); carregarOpcoesLojasMovimentacao();
+            if (!document.getElementById('aba-consertos').classList.contains('hidden')) renderizarConsertos();
+        }
+
+        // ================= CADASTRO: VERIFICAÇÃO AUTOMÁTICA DE PAT E TRANSFERÊNCIA ================= //
+        function verificarDisponibilidadePat() {
+            const patInput = document.getElementById('pat').value.trim().toUpperCase();
+            const container = document.getElementById('status-pat-container');
+            const btnSubmit = document.querySelector('#form-cadastro button[type="submit"]');
+
+            if (!patInput) {
+                container.innerHTML = "";
+                btnSubmit.disabled = false;
+                btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
+                return;
+            }
+
+            const bemEncontrado = obterBensSalvos().find(b => b.pat.toUpperCase() === patInput);
+
+            if (bemEncontrado) {
+                container.innerHTML = `
+                    <div class="text-xs font-bold text-red-600 dark:text-red-400 mb-1">
+                        ⚠️ PAT já registado! Encontra-se em: <span class="uppercase">${bemEncontrado.loja}</span>
+                    </div>
+                    <button type="button" onclick="transferirPatrimonioExistente('${bemEncontrado.pat}')" class="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold py-1.5 px-3 rounded shadow-sm transition">
+                        Transferir para nova loja selecionada
+                    </button>
+                `;
+                btnSubmit.disabled = true;
+                btnSubmit.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                container.innerHTML = `<div class="text-xs font-bold text-emerald-600 dark:text-emerald-400">✅ PAT Livre. Pronto para cadastro.</div>`;
+                btnSubmit.disabled = false;
+                btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        function transferirPatrimonioExistente(pat) {
+            if(!db && navigator.onLine) return alert("Aguarde a conexão com o banco...");
+            
+            const novoLocal = document.getElementById('loja').value;
+            const novoResp = document.getElementById('responsavel').value.toUpperCase() || 'NÃO INFORMADO';
+            
+            if(!novoLocal) return alert("Selecione a loja de destino.");
+
+            let lista = obterBensSalvos();
+            let h = obterHistorico();
+            let idx = lista.findIndex(b => b.pat === pat);
+            
+            if (idx === -1) return alert("Produto não encontrado.");
+            
+            let bem = lista[idx];
+            let lojaAntiga = bem.loja;
+            let respAntigo = bem.responsavel || '-';
+            let dData = new Date().toLocaleString('pt-BR');
+            
+            if(lojaAntiga === novoLocal && respAntigo === novoResp) {
+                return alert("O produto já se encontra nessa loja com esse responsável.");
+            }
+
+            bem.loja = novoLocal;
+            bem.responsavel = novoResp;
+            lista[idx] = bem;
+
+            h.push({ data: dData, pat: bem.pat, origem: lojaAntiga, destino: novoLocal, resp_anterior: respAntigo, resp_novo: novoResp + " (TRANSFERÊNCIA DIRETA)" });
+
+            if (navigator.onLine) {
+                salvarHistoricoNoBanco(h);
+                salvarBensNoBanco(lista);
+            } else {
+                registrarTransferenciaOffline({
+                    bens: [{ pat: bem.pat, lojaAntiga: lojaAntiga, respAntigo: respAntigo }],
+                    destinoLocal: novoLocal,
+                    destinoHistorico: novoLocal,
+                    respFinal: novoResp + " (TRANSFERÊNCIA DIRETA)",
+                    dataAcao: dData
+                });
+                localStorage.setItem('backupListaLocal', JSON.stringify(lista));
+                localStorage.setItem('backupHistoricoLocal', JSON.stringify(h));
+            }
+
+            document.getElementById('form-cadastro').reset();
+            document.getElementById('status-pat-container').innerHTML = "";
+            verificarDisponibilidadePat();
+            
+            const msgBox = document.getElementById('msg-sucesso');
+            msgBox.innerHTML = navigator.onLine ? "✅ Produto transferido com sucesso!" : "⚠️ Produto transferido offline (na fila de espera).";
+            msgBox.classList.remove('hidden');
+            setTimeout(() => {
+                msgBox.classList.add('hidden');
+                msgBox.innerHTML = "✅ Patrimônio cadastrado com sucesso!";
+            }, 4000);
+            atualizarTelas();
+        }
+
+        function salvarPatrimonio(e) { 
+            e.preventDefault(); 
+            if(usuarioLogado.perfil !== 'ADMIN') return; 
+            let p = document.getElementById('pat').value.trim(); 
+            const l = obterBensSalvos(); 
+            if (!p) p = "S/N-" + Math.floor(1000 + Math.random() * 9000); 
+            else if(l.find(b => b.pat === p)) return alert("PAT já existe!"); 
+            l.unshift({ pat: p, descricao: document.getElementById('descricao').value.toUpperCase(), loja: document.getElementById('loja').value, responsavel: document.getElementById('responsavel').value.toUpperCase() || 'Não informado' }); 
+            salvarBensNoBanco(l); 
+            
+            document.getElementById('form-cadastro').reset();
+            document.getElementById('status-pat-container').innerHTML = ""; 
+            verificarDisponibilidadePat();
+            
+            document.getElementById('msg-sucesso').innerHTML = "✅ Patrimônio cadastrado com sucesso!";
+            document.getElementById('msg-sucesso').classList.remove('hidden'); 
+            setTimeout(() => document.getElementById('msg-sucesso').classList.add('hidden'), 3000); 
+        }
+
+        // ================= GESTÃO DE CONSERTOS E RETORNO ================= 
+        function calcularDiasNoConserto(pat) {
+            let hist = obterHistorico(); let ev = hist.slice().reverse().find(h => h.pat === pat && h.destino === 'EM CONSERTO');
+            if(!ev) return 'Tempo desconhecido'; let m = ev.data.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+            if(m) { let dataE = new Date(parseInt(m[3],10), parseInt(m[2],10)-1, parseInt(m[1],10)); let dataA = new Date(); dataA.setHours(0,0,0,0);
+                let dias = Math.floor(Math.abs(dataA - dataE) / (1000 * 60 * 60 * 24));
+                if (dias === 0) return 'Mesmo dia'; if (dias === 1) return '1 dia'; return `${dias} dias`; }
+            return 'Tempo não calculado';
+        }
+
+        function calcularIdasAoConserto(pat) {
+            let hist = obterHistorico();
+            return hist.filter(h => h.pat === pat && h.destino === 'EM CONSERTO').length;
+        }
+
+        function renderizarConsertos() {
+            const tb = document.getElementById('tabela-consertos'); 
+            const termo = document.getElementById('busca-consertos')?.value.toLowerCase() || '';
+            let emConserto = obterBensSalvos().filter(b => b.loja === 'EM CONSERTO'); 
+            
+            if (termo) { emConserto = emConserto.filter(b => b.pat.toLowerCase().includes(termo) || b.descricao.toLowerCase().includes(termo)); }
+
+            tb.innerHTML = '';
+            if(emConserto.length === 0) { tb.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-gray-500 dark:text-slate-500 text-sm">Nenhum equipamento corresponde à busca.</td></tr>'; return; }
+
+            emConserto.forEach(bem => {
+                let dias = calcularDiasNoConserto(bem.pat); let corDias = 'text-gray-600 dark:text-slate-300';
+                if (dias.includes('dias')) { let n = parseInt(dias); if (n > 30) corDias = 'text-red-500 font-bold'; else if (n > 15) corDias = 'text-orange-500 font-bold'; }
+                let idas = calcularIdasAoConserto(bem.pat); let corIdas = idas > 2 ? 'text-red-500 font-bold' : (idas > 1 ? 'text-orange-500 font-bold' : 'text-gray-600 dark:text-slate-300');
+
+                tb.innerHTML += `<tr class="hover:bg-slate-50 dark:hover:bg-[#1e293b] border-b border-gray-100 dark:border-slate-800 transition-colors h-14"><td class="p-4 font-bold text-orange-600 dark:text-orange-400 uppercase">${bem.pat}</td><td class="p-4 text-gray-700 dark:text-slate-200">${bem.descricao}</td><td class="p-4 text-gray-500 dark:text-slate-400 text-xs">${bem.responsavel || '-'}</td><td class="p-4 text-center ${corIdas} text-xs">${idas}x</td><td class="p-4 ${corDias} text-xs font-semibold">${dias}</td><td class="p-4 text-center">${usuarioLogado && usuarioLogado.perfil === 'ADMIN' ? `<button onclick="abrirModalRetornoIndividual('${bem.pat}')" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 dark:text-emerald-400 px-3 py-1.5 rounded font-bold text-xs transition border border-emerald-200 dark:border-emerald-800/50 flex items-center justify-center mx-auto shadow-sm"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path></svg>Retornar</button>` : '-'}</td></tr>`;
+            });
+        }
+
+        function exportarConsertosPDF() {
+            const termo = document.getElementById('busca-consertos')?.value.toLowerCase() || '';
+            let emConserto = obterBensSalvos().filter(b => b.loja === 'EM CONSERTO'); 
+            if (termo) { emConserto = emConserto.filter(b => b.pat.toLowerCase().includes(termo) || b.descricao.toLowerCase().includes(termo)); }
+            if(emConserto.length === 0) return alert("Nenhum equipamento em conserto para exportar.");
+
+            const dadosPDF = emConserto.map(bem => { return { pat: bem.pat, descricao: bem.descricao, responsavel: bem.responsavel || '-', idas: calcularIdasAoConserto(bem.pat).toString() + "x", tempo: calcularDiasNoConserto(bem.pat) }; });
+            const { jsPDF } = window.jspdf; const doc = new jsPDF(); 
+            doc.setFontSize(16); doc.text("Relatório de Equipamentos em Conserto", 14, 20); doc.setFontSize(10); doc.setTextColor(100); doc.text("Gerado em: " + new Date().toLocaleString('pt-BR'), 14, 28); 
+            const colunas = ["PAT", "Descrição", "Responsável", "Idas (Histórico)", "Tempo Atual"];
+            const linhas = dadosPDF.map(item => [item.pat, item.descricao, item.responsavel, item.idas, item.tempo]); 
+            doc.autoTable({ startY: 35, head: [colunas], body: linhas, theme: 'striped', headStyles: { fillColor: [234, 88, 12] }, styles: { fontSize: 9 }, margin: { top: 30 } }); 
+            doc.save("relatorio_consertos.pdf");
+        }
+
+        function abrirModalRetornoIndividual(pat) {
+            const bem = obterBensSalvos().find(b => b.pat === pat); if(!bem) return;
+            document.getElementById('texto-retorno-pat').innerHTML = `Item: <strong class="text-blue-600 dark:text-blue-400">${bem.pat}</strong> - ${bem.descricao}`;
+            document.getElementById('retorno-pat-input').value = bem.pat; document.getElementById('retorno-obs').value = '';
+            const sel = document.getElementById('retorno-destino'); sel.innerHTML = '<option value="">-- Selecione o local de retorno --</option>';
+            obterLojas().forEach(l => { if(l.status === 'Ativa' && l.nome !== 'EM CONSERTO') sel.innerHTML += `<option value="${l.nome}">${l.nome}</option>`; });
+            document.getElementById('modal-retorno-individual').classList.remove('hidden');
+        }
+        function fecharModalRetorno() { document.getElementById('modal-retorno-individual').classList.add('hidden'); }
+
+        function confirmarRetornoIndividual() {
+            if(!db && navigator.onLine) return alert("Aguarde a conexão com o banco...");
+            const pat = document.getElementById('retorno-pat-input').value; const novoLocal = document.getElementById('retorno-destino').value; const obs = document.getElementById('retorno-obs').value.toUpperCase();
+            if(!novoLocal) return alert("Selecione o local de destino.");
+            
+            let lista = obterBensSalvos(); let h = obterHistorico(); let idx = lista.findIndex(b => b.pat === pat); if (idx === -1) return alert("Produto não encontrado.");
+            let bem = lista[idx]; let diasNoConserto = calcularDiasNoConserto(pat); let destHist = novoLocal + ` (RETORNO - ${diasNoConserto})`; let respFinal = obs || 'NÃO INFORMADO'; let dData = new Date().toLocaleString('pt-BR');
+            let itemFila = { pat: bem.pat, lojaAntiga: bem.loja, respAntigo: bem.responsavel || '-' };
+            
+            bem.loja = novoLocal; bem.responsavel = respFinal; lista[idx] = bem;
+            h.push({ data: dData, pat: bem.pat, origem: itemFila.lojaAntiga, destino: destHist, resp_anterior: itemFila.respAntigo, resp_novo: respFinal });
+
+            if (navigator.onLine) { salvarHistoricoNoBanco(h); salvarBensNoBanco(lista); } 
+            else { registrarTransferenciaOffline({ bens: [itemFila], destinoLocal: novoLocal, destinoHistorico: destHist, respFinal: respFinal, dataAcao: dData }); localStorage.setItem('backupListaLocal', JSON.stringify(lista)); localStorage.setItem('backupHistoricoLocal', JSON.stringify(h)); }
+            
+            fecharModalRetorno(); alert(navigator.onLine ? "✅ Retorno registrado com sucesso!" : "⚠️ Sem Internet! O retorno foi guardado offline e será sincronizado."); atualizarTelas();
+        }
+
+        // ================= TRANSFERÊNCIAS EM LOTE ================= //
+        let loteTransferencia = [];
+        function adicionarAoLoteScanner() { processarAdicaoLote(document.getElementById('mov-patrimonio').value.trim().toUpperCase()); }
+        function adicionarAoLoteManual() { processarAdicaoLote(document.getElementById('mov-patrimonio').value.trim().toUpperCase()); }
+        function processarAdicaoLote(pat) {
+            const bem = obterBensSalvos().find(b => b.pat.toString().toUpperCase() === pat); const elD = document.getElementById('mov-produto-desc');
+            if (bem) { if (loteTransferencia.find(i => i.pat === pat)) { elD.innerHTML = `⚠️ PAT ${pat} já está na lista!`; elD.className = "text-xs sm:text-sm font-bold mt-2 text-yellow-600 dark:text-yellow-500"; } else { loteTransferencia.push(bem); renderizarLote(); elD.innerHTML = `✅ Adicionado: ${bem.descricao}`; elD.className = "text-xs sm:text-sm font-bold mt-2 text-green-600 dark:text-green-400"; } } 
+            else { elD.innerHTML = `❌ PAT não encontrado.`; elD.className = "text-xs sm:text-sm font-bold mt-2 text-red-500"; }
+            document.getElementById('mov-patrimonio').value = ''; document.getElementById('mov-patrimonio').focus();
+        }
+        function removerDoLote(pat) { loteTransferencia = loteTransferencia.filter(i => i.pat !== pat); renderizarLote(); }
+        function limparLote() { loteTransferencia = []; renderizarLote(); document.getElementById('mov-produto-desc').innerHTML = "Pronto para ler códigos..."; document.getElementById('mov-produto-desc').className = "text-xs sm:text-sm font-bold mt-2 text-gray-500 dark:text-slate-400"; }
+        function renderizarLote() {
+            const lista = document.getElementById('lista-lote'); const ph = document.getElementById('lista-lote-vazia'); document.getElementById('lote-count').innerText = loteTransferencia.length; lista.innerHTML = '';
+            if(loteTransferencia.length === 0) { ph.classList.remove('hidden'); } else { ph.classList.add('hidden'); loteTransferencia.forEach(bem => { lista.innerHTML += `<li class="flex justify-between items-center bg-white dark:bg-[#0b1120] p-3 rounded-lg border border-gray-200 dark:border-slate-700 shadow-sm"><div class="text-sm"><span class="font-extrabold text-blue-600 dark:text-blue-400">${bem.pat}</span> - <span class="text-gray-700 dark:text-slate-200 font-semibold">${bem.descricao}</span><div class="text-[10px] text-gray-500 uppercase mt-0.5 font-bold">Local Atual: ${bem.loja} | Resp: ${bem.responsavel || '-'}</div></div><button onclick="removerDoLote('${bem.pat}')" class="text-red-500 hover:text-red-700 p-2 bg-red-50 dark:bg-red-900/20 rounded transition"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button></li>`; }); }
+            const t = loteTransferencia.length > 0; ['btn-transf-normal','btn-transf-conserto'].forEach(id => { const b = document.getElementById(id); b.disabled = !t; t ? b.classList.remove('opacity-50','cursor-not-allowed') : b.classList.add('opacity-50','cursor-not-allowed'); });
+        }
+
+        function executarAcaoTransferenciaLote(tipo) {
+            if(!db && navigator.onLine) return alert("Conectando ao banco de dados...");
+            if(loteTransferencia.length === 0) return alert("Adicione produtos ao lote.");
+            const nLoc = document.getElementById('mov-novo-local').value; const obs = document.getElementById('mov-novo-resp').value.toUpperCase();
+            if(tipo === 'TRANSFERENCIA' && !nLoc) return alert("Selecione o destino.");
+            
+            let lista = obterBensSalvos(); let h = obterHistorico(); const dData = new Date().toLocaleString('pt-BR'); let cCor = 'bg-blue-600 border-blue-500';
+            let dHist = nLoc; let rFin = obs || 'NÃO INFORMADO';
+            if (tipo === 'CONSERTO') { dHist = 'EM CONSERTO'; rFin = obs || 'ASSISTÊNCIA TÉCNICA'; cCor = 'bg-orange-600 border-orange-500'; }
+
+            let iFila = [];
+            loteTransferencia.forEach(bL => {
+                let idx = lista.findIndex(b => b.pat === bL.pat); if(idx === -1) return; let bem = lista[idx];
+                iFila.push({ pat: bem.pat, lojaAntiga: bem.loja, respAntigo: bem.responsavel || '-' });
+                bem.loja = (tipo === 'CONSERTO') ? 'EM CONSERTO' : nLoc; bem.responsavel = rFin; lista[idx] = bem; 
+                h.push({ data: dData, pat: bem.pat, origem: iFila[iFila.length-1].lojaAntiga, destino: dHist, resp_anterior: iFila[iFila.length-1].respAntigo, resp_novo: rFin });
+            });
+
+            if (navigator.onLine) { salvarHistoricoNoBanco(h); salvarBensNoBanco(lista); } 
+            else { registrarTransferenciaOffline({ bens: iFila, destinoLocal: (tipo === 'CONSERTO') ? 'EM CONSERTO' : nLoc, destinoHistorico: dHist, respFinal: rFin, dataAcao: dData }); localStorage.setItem('backupListaLocal', JSON.stringify(lista)); localStorage.setItem('backupHistoricoLocal', JSON.stringify(h)); }
+            
+            limparLote(); document.getElementById('mov-novo-local').value = ''; document.getElementById('mov-novo-resp').value = ''; 
+            const msg = document.getElementById('msg-sucesso-mov'); msg.className = `text-white p-4 rounded-lg font-bold mt-6 border text-sm text-center shadow-lg ${cCor}`;
+            if (!navigator.onLine) { msg.innerText = `⚠️ Sem Internet! O Lote foi guardado offline.`; } else if(tipo === 'CONSERTO') { msg.innerText = `⚠️ Lote enviado para Conserto!`; } else { msg.innerText = `✅ Transferência em Lote concluída!`; }
+            msg.classList.remove('hidden'); setTimeout(() => msg.classList.add('hidden'), 4000); atualizarTelas();
+        }
+
+        // ================= EDIÇÃO BÁSICA DE PRODUTO ================= //
+        function abrirModalEditarProduto(pat) { const p = obterBensSalvos().find(x => x.pat === pat); if(!p) return; const s = document.getElementById('edit-produto-loja'); s.innerHTML = ''; obterLojas().forEach(l => { if(l.status === 'Ativa') s.innerHTML += `<option value="${l.nome}">${l.nome}</option>`; }); if (p.loja === 'EM CONSERTO' || !obterLojas().find(l => l.nome === p.loja && l.status === 'Ativa')) { s.innerHTML += `<option value="${p.loja}">${p.loja}</option>`; } document.getElementById('edit-produto-pat-original').value = p.pat; document.getElementById('edit-produto-pat').value = p.pat; document.getElementById('edit-produto-descricao').value = p.descricao; document.getElementById('edit-produto-loja').value = p.loja; document.getElementById('edit-produto-responsavel').value = p.responsavel || ''; document.getElementById('modal-produto').classList.remove('hidden'); }
+        function fecharModalProduto() { document.getElementById('modal-produto').classList.add('hidden'); }
+        function salvarEdicaoProduto() { if(!db && navigator.onLine) return alert("Aguarde conexão..."); const pO = document.getElementById('edit-produto-pat-original').value; const nD = document.getElementById('edit-produto-descricao').value.trim().toUpperCase(); const nL = document.getElementById('edit-produto-loja').value; const nR = document.getElementById('edit-produto-responsavel').value.trim().toUpperCase() || 'NÃO INFORMADO'; if(!nD) return alert("Descrição obrigatória."); let l = obterBensSalvos(); let i = l.findIndex(x => x.pat === pO); if(i === -1) return alert("Produto não encontrado."); let pA = Object.assign({}, l[i]); l[i].descricao = nD; l[i].loja = nL; l[i].responsavel = nR; salvarBensNoBanco(l); if (pA.loja !== nL || pA.responsavel !== nR) { const h = obterHistorico(); h.push({ data: new Date().toLocaleString('pt-BR'), pat: pO, origem: pA.loja, destino: nL, resp_anterior: pA.responsavel || '-', resp_novo: nR + " (EDITADO MANUAL)" }); salvarHistoricoNoBanco(h); } fecharModalProduto(); carregarTabela(); }
+
+        // ================= RELATÓRIOS E EXPORTAÇÃO ================= //
+        function carregarOpcoesRelatorio() { const s = document.getElementById('relatorio-loja-select'); const v = s.value; s.innerHTML = '<option value="TODAS">-- Mostrar Todas as Lojas --</option>'; obterLojas().forEach(l => s.innerHTML += `<option value="${l.nome}">${l.nome}</option>`); s.innerHTML += `<option value="EM CONSERTO">EM CONSERTO</option>`; if(v) s.value = v; }
+        function renderizarRelatorios() { const c = document.getElementById('container-relatorios'); c.innerHTML = ''; let lj = obterLojas(); const pr = obterBensSalvos(); const lS = document.getElementById('relatorio-loja-select').value; const bT = document.getElementById('btn-exportar-texto'); const bP = document.getElementById('btn-exportar-pdf-texto'); if (lj.length === 0) return c.innerHTML = '<p class="text-gray-500">Sem lojas cadastradas.</p>'; lj.push({nome: "EM CONSERTO"}); if (lS !== "TODAS") { lj = lj.filter(l => l.nome === lS); bT.innerText = `CSV (${lS})`; bP.innerText = `PDF (${lS})`; } else { bT.innerText = `CSV (Todas)`; bP.innerText = `PDF (Todas)`; } if(lj.length === 0) return c.innerHTML = '<p class="text-gray-500">Nenhuma loja encontrada.</p>'; lj.forEach(l => { const pl = pr.filter(p => p.loja.toUpperCase() === l.nome.toUpperCase()); if (lS === "TODAS" && pl.length === 0) return; let bg = l.nome === 'EM CONSERTO' ? 'bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800/50' : 'bg-white dark:bg-[#0b1120] border-gray-200 dark:border-slate-800'; let h = `<div class="${bg} rounded-lg border p-4 sm:p-5 shadow-sm transition-colors"><div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3"><h3 class="text-lg sm:text-xl font-bold text-gray-800 dark:text-white">${l.nome} <span class="text-xs font-normal text-blue-600 dark:text-blue-400 ml-2 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800/50">${pl.length} itens</span></h3>${lS === "TODAS" ? `<div class="flex gap-2 w-full sm:w-auto"><button onclick="exportarLojaCSV('${l.nome}')" class="flex-1 sm:flex-none justify-center bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-white text-[10px] sm:text-xs font-bold py-1.5 px-3 rounded transition flex items-center border border-slate-300 dark:border-slate-600 shadow-sm">CSV</button><button onclick="exportarLojaPDF('${l.nome}')" class="flex-1 sm:flex-none justify-center bg-red-50 hover:bg-red-100 dark:bg-red-900/50 dark:hover:bg-red-800 text-red-600 dark:text-red-200 text-[10px] sm:text-xs font-bold py-1.5 px-3 rounded transition flex items-center border border-red-200 dark:border-red-700/50 shadow-sm">PDF</button></div>` : ''}</div>`; if (pl.length === 0) { h += `<p class="text-xs sm:text-sm text-gray-500 italic pb-2">Sem produtos.</p></div>`; c.innerHTML += h; return; } h += `<div class="overflow-x-auto rounded border border-gray-200 dark:border-slate-800"><table class="w-full text-left border-collapse text-xs sm:text-sm min-w-[350px]"><thead class="bg-slate-50 dark:bg-[#0f172a]"><tr class="text-gray-500 dark:text-slate-400 font-semibold border-b border-gray-200 dark:border-slate-800"><th class="p-2 sm:p-3">PAT</th><th class="p-2 sm:p-3">Descrição do Produto</th><th class="p-2 sm:p-3">Responsável</th></tr></thead><tbody class="text-gray-700 dark:text-slate-200 divide-y border-gray-100 dark:border-slate-800 dark:divide-slate-800">`; pl.forEach(p => { h += `<tr class="hover:bg-slate-50 dark:hover:bg-[#1e293b] transition-colors"><td class="p-2 sm:p-3 font-bold text-gray-800 dark:text-slate-200">${p.pat}</td><td class="p-2 sm:p-3 text-gray-600 dark:text-slate-300">${p.descricao}</td><td class="p-2 sm:p-3 text-gray-500 dark:text-slate-400">${p.responsavel}</td></tr>`; }); c.innerHTML += h + `</tbody></table></div></div>`; }); }
+        function exportarRelatorioAtualPDF() { const l = document.getElementById('relatorio-loja-select').value; l === "TODAS" ? exportarBaseCompletaPDF() : exportarLojaPDF(l); }
+        function exportarLojaPDF(nomeLoja) { const p = obterBensSalvos().filter(x => x.loja.toUpperCase() === nomeLoja.toUpperCase()); if(p.length === 0) return alert(`Sem produtos em ${nomeLoja}.`); gerarPDF(p, `Relatório - ${nomeLoja}`, `relatorio_${nomeLoja.replace(/\s+/g, '_').toLowerCase()}.pdf`, ["PAT", "Descrição", "Loja", "Responsável"]); }
+        function exportarBaseCompletaPDF() { const p = obterBensSalvos(); if(p.length === 0) return alert("Sem dados."); gerarPDF(p, "Relatório Geral - Todas as Lojas", "relatorio_todas_lojas.pdf", ["PAT", "Descrição", "Loja", "Responsável"]); }
+        function gerarPDF(arr, t, nm, cols) { const { jsPDF } = window.jspdf; const doc = new jsPDF(); doc.setFontSize(16); doc.text(t, 14, 20); doc.setFontSize(10); doc.setTextColor(100); doc.text("Gerado em: " + new Date().toLocaleString('pt-BR'), 14, 28); const l = arr.map(i => { if(cols[0] === "Data / Hora") return [i.data, i.pat, i.origem, i.destino, i.resp_anterior, i.resp_novo]; return [i.pat, i.descricao, i.loja, i.responsavel]; }); doc.autoTable({ startY: 35, head: [cols], body: l, theme: 'striped', headStyles: { fillColor: [15, 23, 42] }, styles: { fontSize: 9 }, margin: { top: 30 } }); doc.save(nm); }
+        function exportarRelatorioAtual() { const l = document.getElementById('relatorio-loja-select').value; l === "TODAS" ? exportarCSV() : exportarLojaCSV(l); }
+        function exportarLojaCSV(nomeLoja) { const p = obterBensSalvos().filter(x => x.loja.toUpperCase() === nomeLoja.toUpperCase()); if(p.length === 0) return; let csv = "data:text/csv;charset=utf-8,\uFEFFPAT;Descricao;Loja;Responsavel\n"; p.forEach(b => csv += `${b.pat};${b.descricao};${b.loja};${b.responsavel}\n`); const l = document.createElement("a"); l.setAttribute("href", encodeURI(csv)); l.setAttribute("download", `relatorio_${nomeLoja.replace(/\s+/g, '_').toLowerCase()}.csv`); document.body.appendChild(l); l.click(); document.body.removeChild(l); }
+
+        // ================= HISTÓRICO AVANÇADO ================= //
+        function carregarFiltroAnosHistorico() { const a = new Set(); obterHistorico().forEach(r => { let m = r.data.match(/(\d{2})\/(\d{2})\/(\d{4})/); if(m && m[3]) a.add(m[3]); }); const s = document.getElementById('filtro-ano-historico'); let at = s.value; s.innerHTML = '<option value="">Todos</option>'; Array.from(a).sort().reverse().forEach(x => s.innerHTML += `<option value="${x}">${x}</option>`); if(at) s.value = at; }
+        function obterHistoricoFiltrado() { let h = obterHistorico(); let m = document.getElementById('filtro-mes-historico').value; let a = document.getElementById('filtro-ano-historico').value; let cI = h.map((item, index) => ({ ...item, originalIndex: index })); return cI.filter(r => { let p = r.data.match(/(\d{2})\/(\d{2})\/(\d{4})/); if(p && p.length === 4) { if(m && p[2] !== m) return false; if(a && p[3] !== a) return false; } return true; }); }
+        function mudarPaginaHistorico(p) { paginaAtualHistorico = p; carregarTabelaHistorico(); }
+        function carregarTabelaHistorico() { const hF = obterHistoricoFiltrado(); const tb = document.getElementById('tabela-historico'); tb.innerHTML = ''; if(hF.length === 0) { document.getElementById('historico-total-registros').innerText = "0 registro(s)"; document.getElementById('historico-info-pagina').innerText = "Página 1 de 1"; document.getElementById('historico-paginacao').innerHTML = ""; return tb.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-500">Nenhum registro.</td></tr>'; } const hR = hF.slice().reverse(); const t = hR.length; const tP = Math.ceil(t / ITENS_POR_PAGINA) || 1; if(paginaAtualHistorico > tP) paginaAtualHistorico = tP; document.getElementById('historico-total-registros').innerText = `${t} registro(s)`; document.getElementById('historico-info-pagina').innerText = `Página ${paginaAtualHistorico} de ${tP}`; const pag = hR.slice((paginaAtualHistorico - 1) * ITENS_POR_PAGINA, (paginaAtualHistorico - 1) * ITENS_POR_PAGINA + ITENS_POR_PAGINA); pag.forEach(r => { const isExc = r.destino === 'REGISTRO EXCLUÍDO'; const isImp = r.origem === 'PLANILHA' && r.destino === 'IMPORTADO'; const isCon = r.destino === 'EM CONSERTO'; const isRet = r.destino.includes('RETORNO'); let cC = 'hover:bg-slate-50 dark:hover:bg-[#1e293b] text-gray-700 dark:text-slate-300'; let dC = 'text-blue-600 dark:text-blue-400'; if (isExc) { cC = 'bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-300'; dC = 'text-red-600 dark:text-red-500'; } else if (isImp) { cC = 'bg-blue-50/30 text-blue-800 dark:bg-blue-950/10 dark:text-blue-300'; } else if (isCon) { cC = 'bg-orange-50/80 text-orange-900 dark:bg-orange-900/20 dark:text-orange-200'; dC = 'text-orange-600 dark:text-orange-400 font-extrabold'; } else if (isRet) { cC = 'bg-emerald-50/80 text-emerald-900 dark:bg-emerald-900/20 dark:text-emerald-200'; dC = 'text-emerald-600 dark:text-emerald-400 font-extrabold'; } let chk = '<td class="p-4"></td>'; if(usuarioLogado && usuarioLogado.perfil === 'ADMIN') { chk = `<td class="p-4 text-center border-b border-gray-100 dark:border-slate-800"><input type="checkbox" class="chk-item-historico cursor-pointer w-4 h-4 text-blue-600 rounded bg-white dark:bg-[#0f172a] border-gray-300 dark:border-slate-600 focus:ring-blue-500" value="${r.originalIndex}"></td>`; } tb.innerHTML += `<tr class="${cC} border-b border-gray-100 dark:border-slate-800 transition-colors h-14">${chk}<td class="p-4 whitespace-nowrap">${r.data}</td><td class="p-4 font-bold text-gray-800 dark:text-white max-w-[150px] truncate" title="${r.pat}">${r.pat}</td><td class="p-4 max-w-[120px] truncate" title="${r.origem}">${r.origem}</td><td class="p-4 font-bold max-w-[200px] truncate ${dC}" title="${r.destino}">${r.destino}</td><td class="p-4 max-w-[150px] truncate" title="${r.resp_anterior}">${r.resp_anterior}</td><td class="p-4 font-medium text-gray-800 dark:text-white max-w-[150px] truncate" title="${r.resp_novo}">${r.resp_novo}</td></tr>`; }); renderizarControlesPaginacao(tP, paginaAtualHistorico, 'historico-paginacao', 'mudarPaginaHistorico'); }
+        function exportarHistoricoCSV() { const f = obterHistoricoFiltrado(); if(f.length === 0) return alert("Sem dados."); let csv = "data:text/csv;charset=utf-8,\uFEFFData_Hora;PAT;Origem;Destino;Novo_Responsavel_Obs\n"; f.slice().reverse().forEach(r => { csv += `${r.data};${r.pat};${r.origem};${r.destino};${r.resp_novo}\n`; }); const l = document.createElement("a"); l.setAttribute("href", encodeURI(csv)); l.setAttribute("download", "historico.csv"); document.body.appendChild(l); l.click(); document.body.removeChild(l); }
+        function exportarHistoricoPDF() { const f = obterHistoricoFiltrado(); if(f.length === 0) return alert("Sem dados."); let m = document.getElementById('filtro-mes-historico').options[document.getElementById('filtro-mes-historico').selectedIndex].text; let a = document.getElementById('filtro-ano-historico').value; let t = "Histórico de Movimentações"; if(a) t += ` - ${m} de ${a}`; gerarPDF(f.slice().reverse(), t, "historico.pdf", ["Data / Hora", "PAT", "Origem", "Destino", "Responsável / Obs"]); }
+        function toggleTodosHistorico(s) { document.querySelectorAll('.chk-item-historico').forEach(c => c.checked = s.checked); }
+        function excluirHistoricoSelecionados() { if (usuarioLogado.perfil !== 'ADMIN') return; const s = document.querySelectorAll('.chk-item-historico:checked'); if (s.length === 0) return; if (confirm(`Apagar ${s.length} registro(s)?`)) { let h = obterHistorico(); const idx = Array.from(s).map(c => parseInt(c.value)); h = h.filter((_, i) => !idx.includes(i)); salvarHistoricoNoBanco(h); document.getElementById('chk-todos-historico').checked = false; carregarTabelaHistorico(); carregarFiltroAnosHistorico(); } }
+        function limparTodoHistorico() { if (usuarioLogado.perfil !== 'ADMIN') return; if (obterHistorico().length === 0) return; if (confirm("🚨 CUIDADO!\nApagar TODO o histórico? NÃO pode ser desfeita.")) { salvarHistoricoNoBanco([]); paginaAtualHistorico = 1; carregarTabelaHistorico(); carregarFiltroAnosHistorico(); } }
+
+        // ================= LOJAS ================= //
+        function buscarLojas() { paginaAtualLojas = 1; renderizarLojas(); } function mudarPaginaLojas(p) { paginaAtualLojas = p; renderizarLojas(); }
+        function renderizarLojas() { const tB = document.getElementById('busca-lojas').value.toLowerCase(); const lj = obterLojas(); const pr = obterBensSalvos(); const tb = document.getElementById('tabela-lojas'); tb.innerHTML = ''; let f = lj.filter(l => l.nome !== 'EM CONSERTO' && (l.nome.toLowerCase().includes(tB) || l.cidade.toLowerCase().includes(tB))); const tP = Math.ceil(f.length / ITENS_POR_PAGINA) || 1; if(paginaAtualLojas > tP) paginaAtualLojas = tP; document.getElementById('lojas-total-registros').innerText = `${f.length} registro(s)`; document.getElementById('lojas-info-pagina').innerText = `Página ${paginaAtualLojas} de ${tP}`; const p = f.slice((paginaAtualLojas - 1) * ITENS_POR_PAGINA, (paginaAtualLojas - 1) * ITENS_POR_PAGINA + ITENS_POR_PAGINA); p.forEach(l => { const q = pr.filter(x => x.loja.toUpperCase() === l.nome.toUpperCase()).length; const bC = l.status === 'Ativa' ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 'bg-red-500/10 text-red-500 border border-red-500/20'; tb.innerHTML += `<tr class="hover:bg-slate-50 dark:hover:bg-[#1e293b] transition-colors h-14"><td class="p-4 font-bold text-gray-800 dark:text-white">${l.nome}</td><td class="p-4 uppercase text-gray-600 dark:text-slate-300">${l.cidade}</td><td class="p-4 text-gray-600 dark:text-slate-300">${l.estado}</td><td class="p-4 text-blue-600 dark:text-blue-400 font-bold">${q}</td><td class="p-4"><span class="${bC} px-3 py-1 rounded-full text-xs font-semibold">${l.status}</span></td><td class="p-4 text-center">${usuarioLogado.perfil === 'ADMIN' ? `<div class="flex justify-center gap-2"><button onclick="abrirModalEditarLoja('${l.nome}')" class="text-blue-500 hover:text-blue-400 transition" title="Editar"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></button><button onclick="excluirLoja('${l.nome}')" class="text-gray-400 hover:text-red-500 transition" title="Excluir"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></div>` : ''}</td></tr>`; }); renderizarControlesPaginacao(tP, paginaAtualLojas, 'lojas-paginacao', 'mudarPaginaLojas'); }
+        function abrirModalNovaLoja() { document.getElementById('modal-loja-titulo').innerText = "Adicionar Nova Loja"; document.getElementById('loja-original-nome').value = ""; document.getElementById('nova-loja-nome').value = ""; document.getElementById('nova-loja-cidade').value = ""; document.getElementById('nova-loja-estado').value = ""; document.getElementById('container-loja-status').classList.add('hidden'); document.getElementById('modal-loja').classList.remove('hidden'); }
+        function abrirModalEditarLoja(n) { const l = obterLojas().find(x => x.nome === n); if(!l) return; document.getElementById('modal-loja-titulo').innerText = "Editar Loja"; document.getElementById('loja-original-nome').value = l.nome; document.getElementById('nova-loja-nome').value = l.nome; document.getElementById('nova-loja-cidade').value = l.cidade; document.getElementById('nova-loja-estado').value = l.estado; document.getElementById('nova-loja-status').value = l.status || 'Ativa'; document.getElementById('container-loja-status').classList.remove('hidden'); document.getElementById('modal-loja').classList.remove('hidden'); }
+        function fecharModalLoja() { document.getElementById('modal-loja').classList.add('hidden'); }
+        function salvarLoja() { const o = document.getElementById('loja-original-nome').value; const n = document.getElementById('nova-loja-nome').value.trim().toUpperCase(); const c = document.getElementById('nova-loja-cidade').value.trim().toUpperCase(); const e = document.getElementById('nova-loja-estado').value.trim().toUpperCase() || 'RS'; const s = document.getElementById('container-loja-status').classList.contains('hidden') ? 'Ativa' : document.getElementById('nova-loja-status').value; if (!n || !c) return alert('Preencha nome e cidade.'); if (n === 'EM CONSERTO') return alert('Esse nome é reservado.'); let lj = obterLojas(); if (o) { if(n !== o && lj.find(l => l.nome === n)) return alert('Nome já existe!'); const i = lj.findIndex(l => l.nome === o); lj[i] = { nome: n, cidade: c, estado: e, status: s }; salvarLojasNoBanco(lj); if (n !== o) { let pr = obterBensSalvos(); pr.forEach(p => { if(p.loja.toUpperCase() === o) p.loja = n; }); salvarBensNoBanco(pr); let h = obterHistorico(); h.forEach(x => { if(x.origem.toUpperCase() === o) x.origem = n; if(x.destino.toUpperCase() === o) x.destino = n; }); salvarHistoricoNoBanco(h); } } else { if(lj.find(l => l.nome === n)) return alert('Loja existe!'); lj.unshift({ nome: n, cidade: c, estado: e, status: s }); salvarLojasNoBanco(lj); } fecharModalLoja(); renderizarLojas(); if(o && o !== n) alert("Loja atualizada."); }
+        function excluirLoja(n) { if (usuarioLogado.perfil !== 'ADMIN') return; const q = obterBensSalvos().filter(p => p.loja.toUpperCase() === n.toUpperCase()).length; if (q > 0) return alert(`Transfira os ${q} produtos.`); if (confirm(`Excluir ${n}?`)) { let lj = obterLojas().filter(l => l.nome !== n); salvarLojasNoBanco(lj); renderizarLojas(); } }
+
+        // ================= ESTOQUE ================= //
+        function buscarEstoque() { paginaAtualEstoque = 1; renderizarEstoque(); } function mudarPaginaEstoque(p) { paginaAtualEstoque = p; renderizarEstoque(); }
+        function renderizarEstoque() { const tP = document.getElementById('busca-estoque-produto').value.toLowerCase(); const tL = document.getElementById('busca-estoque-loja').value.toLowerCase(); const b = obterBensSalvos(); const tb = document.getElementById('tabela-estoque'); tb.innerHTML = ''; const m = {}; b.forEach(x => { const k = x.descricao.toUpperCase().trim() + '|' + x.loja.toUpperCase().trim(); if(!m[k]) m[k] = { descricao: x.descricao.toUpperCase().trim(), loja: x.loja.toUpperCase().trim(), qtd: 0 }; m[k].qtd += 1; }); let l = Object.values(m); if(tP || tL) { l = l.filter(i => i.descricao.toLowerCase().includes(tP) && i.loja.toLowerCase().includes(tL)); } const tp = Math.ceil(l.length / ITENS_POR_PAGINA) || 1; if(paginaAtualEstoque > tp) paginaAtualEstoque = tp; document.getElementById('estoque-total-registros').innerText = `${l.length} agrupamento(s)`; document.getElementById('estoque-info-pagina').innerText = `Página ${paginaAtualEstoque} de ${tp}`; const p = l.slice((paginaAtualEstoque - 1) * ITENS_POR_PAGINA, (paginaAtualEstoque - 1) * ITENS_POR_PAGINA + ITENS_POR_PAGINA); p.forEach(i => { let sB = i.qtd > 5 ? `<span class="bg-green-500/10 text-green-500 border border-green-500/20 px-3 py-1 rounded-full text-xs font-semibold">Em Estoque</span>` : `<span class="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 border border-yellow-200 px-3 py-1 rounded-full text-xs font-semibold">Baixo</span>`; tb.innerHTML += `<tr class="hover:bg-slate-50 dark:hover:bg-[#1e293b] transition-colors h-14"><td class="p-4 font-bold text-gray-800 dark:text-white">${i.descricao}</td><td class="p-4 text-gray-600 dark:text-slate-300">${i.loja}</td><td class="p-4 text-center font-bold text-blue-600 dark:text-blue-400 text-lg">${i.qtd}</td><td class="p-4">${sB}</td></tr>`; }); renderizarControlesPaginacao(tp, paginaAtualEstoque, 'estoque-paginacao', 'mudarPaginaEstoque'); }
+        function exportarEstoqueCSV() { const tP = document.getElementById('busca-estoque-produto').value.toLowerCase(); const tL = document.getElementById('busca-estoque-loja').value.toLowerCase(); const b = obterBensSalvos(); const m = {}; b.forEach(x => { const k = x.descricao.toUpperCase().trim() + '|' + x.loja.toUpperCase().trim(); if(!m[k]) m[k] = { descricao: x.descricao.toUpperCase().trim(), loja: x.loja.toUpperCase().trim(), qtd: 0 }; m[k].qtd += 1; }); let l = Object.values(m); if(tP || tL) { l = l.filter(i => i.descricao.toLowerCase().includes(tP) && i.loja.toLowerCase().includes(tL)); } if (l.length === 0) return alert("Sem dados."); let c = "data:text/csv;charset=utf-8,\uFEFFProduto;Loja;Quantidade\n"; l.forEach(i => { c += `${i.descricao};${i.loja};${i.qtd}\n`; }); const a = document.createElement("a"); a.setAttribute("href", encodeURI(c)); a.setAttribute("download", "estoque.csv"); document.body.appendChild(a); a.click(); document.body.removeChild(a); }
+
+        // ================= FUNÇÕES GERAIS E TABELA PRODUTOS ================= //
+        function acionarImportacao() { if(usuarioLogado.perfil !== 'ADMIN') return; document.getElementById('input-planilha').click(); }
+        function processarPlanilha(e) { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = function(ev) { const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' }); const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]); let i = 0, ig = 0, nv = 0; let l = obterBensSalvos(); let lj = obterLojas(); const h = obterHistorico(); const d = new Date().toLocaleString('pt-BR'); rows.forEach(rw => { let p = rw['Patrimônio'] || rw['PAT'] || ''; let pr = rw['Produto'] || rw['Descrição'] || ''; let lc = rw['Loja'] || rw['Localização'] || 'Sem Local'; let rp = rw['Responsável'] || 'Não informado'; if (!pr) return; let pf = p ? p.toString().trim() : ("S/N-" + Math.floor(1000 + Math.random() * 9000)); if (l.find(b => b.pat === pf)) { ig++; } else { if (lc.toUpperCase().trim() !== 'EM CONSERTO' && !lj.find(x => x.nome.toLowerCase() === lc.toLowerCase().trim())) { lj.push({ nome: lc.toUpperCase().trim(), cidade: "N/I", estado: "RS", status: "Ativa" }); nv++; } l.unshift({ pat: pf, descricao: pr.toUpperCase() + (rw['Categoria'] ? ` (${rw['Categoria']})` : ''), loja: lc.toUpperCase().trim(), responsavel: rp.toUpperCase() }); h.push({ data: d, pat: pf, origem: 'PLANILHA', destino: 'IMPORTADO', resp_anterior: 'Descrição:', resp_novo: pr.toUpperCase() + ` (${lc.toUpperCase().trim()})` }); i++; } }); salvarBensNoBanco(l); salvarLojasNoBanco(lj); salvarHistoricoNoBanco(h); document.getElementById('input-planilha').value = ''; alert(`Concluido!\n✅ ${i} produtos importados.\n⚠️ ${ig} ignorados (duplicados).\n🏷️ ${nv} novas lojas.`); mostrarAba('lista', document.querySelectorAll('.menu-item')[1]); }; r.readAsArrayBuffer(f); }
+        function mudarPaginaProdutos(p) { paginaAtualProdutos = p; carregarTabela(); } function buscarProdutos() { paginaAtualProdutos = 1; carregarTabela(); }
+        function excluirPatrimonio(p) { if (usuarioLogado.perfil !== 'ADMIN') return; if (confirm(`Excluir: ${p}?`)) { salvarBensNoBanco(obterBensSalvos().filter(b => b.pat !== p)); const h = obterHistorico(); h.push({data: new Date().toLocaleString('pt-BR'), pat: p, origem: 'SISTEMA', destino: 'REGISTRO EXCLUÍDO', resp_anterior: 'Por:', resp_novo: usuarioLogado.nome}); salvarHistoricoNoBanco(h); carregarTabela(); atualizarDashboard(); } }
+        function toggleTodos(s) { document.querySelectorAll('.chk-item').forEach(c => c.checked = s.checked); }
+        function excluirSelecionados() { if (usuarioLogado.perfil !== 'ADMIN') return; const s = document.querySelectorAll('.chk-item:checked'); if (s.length === 0) return; if (confirm(`Excluir ${s.length} produtos?`)) { let l = obterBensSalvos(); const h = obterHistorico(); const d = new Date().toLocaleString('pt-BR'); s.forEach(c => { l = l.filter(b => b.pat !== c.value); h.push({data: d, pat: c.value, origem: 'SISTEMA', destino: 'REGISTRO EXCLUÍDO', resp_anterior: 'Lote:', resp_novo: usuarioLogado.nome}); }); salvarBensNoBanco(l); salvarHistoricoNoBanco(h); document.getElementById('chk-todos').checked = false; carregarTabela(); atualizarDashboard(); } }
+        function exportarCSV() { const l = obterBensSalvos(); if (l.length === 0) return; let c = "data:text/csv;charset=utf-8,\uFEFFPAT;Descricao;Loja;Responsavel\n"; l.forEach(b => c += `${b.pat};${b.descricao};${b.loja};${b.responsavel}\n`); const a = document.createElement("a"); a.setAttribute("href", encodeURI(c)); a.setAttribute("download", "produtos.csv"); document.body.appendChild(a); a.click(); document.body.removeChild(a); }
+
+        function carregarTabela() {
+            let l = obterBensSalvos(); const tb = document.getElementById('tabela-bens'); const tB = document.getElementById('busca-produtos').value.toLowerCase(); tb.innerHTML = ''; 
+            if (tB) { l = l.filter(b => b.pat.toLowerCase().includes(tB) || b.descricao.toLowerCase().includes(tB) || b.loja.toLowerCase().includes(tB) || (b.responsavel && b.responsavel.toLowerCase().includes(tB))); }
+            if(l.length === 0) { document.getElementById('produtos-total-registros').innerText = "0 produto(s)"; document.getElementById('produtos-info-pagina').innerText = "Página 1 de 1"; document.getElementById('produtos-paginacao').innerHTML = ""; return tb.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-gray-500 text-sm">Nenhum produto encontrado.</td></tr>'; }
+            const tP = Math.ceil(l.length / ITENS_POR_PAGINA) || 1; if(paginaAtualProdutos > tP) paginaAtualProdutos = tP;
+            document.getElementById('produtos-total-registros').innerText = `${l.length} produto(s)`; document.getElementById('produtos-info-pagina').innerText = `Página ${paginaAtualProdutos} de ${tP}`;
+            const p = l.slice((paginaAtualProdutos - 1) * ITENS_POR_PAGINA, (paginaAtualProdutos - 1) * ITENS_POR_PAGINA + ITENS_POR_PAGINA);
+            p.forEach(b => {
+                let btnExc = '', chk = '<td class="p-4"></td>'; 
+                if(usuarioLogado && usuarioLogado.perfil === 'ADMIN') {
+                    let btnRetorno = b.loja === 'EM CONSERTO' ? `<button onclick="abrirModalRetornoIndividual('${b.pat}')" class="text-emerald-500 dark:text-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-300 font-bold p-1 transition" title="Registrar Retorno"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path></svg></button>` : '';
+                    btnExc = `<div class="flex justify-center gap-2">${btnRetorno}<button onclick="abrirModalEditarProduto('${b.pat}')" class="text-blue-500 hover:text-blue-600 font-bold p-1 transition" title="Editar"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></button><button onclick="excluirPatrimonio('${b.pat}')" class="text-gray-400 hover:text-red-600 font-bold p-1 transition" title="Excluir"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button></div>`;
+                    chk = `<td class="p-4 text-center border-b border-gray-100 dark:border-slate-800"><input type="checkbox" class="chk-item cursor-pointer w-4 h-4 text-blue-600 rounded bg-white dark:bg-[#0f172a] border-gray-300 dark:border-slate-600 focus:ring-blue-500" value="${b.pat}"></td>`;
+                }
+                tb.innerHTML += `<tr class="hover:bg-slate-50 dark:hover:bg-[#1e293b] border-b border-gray-100 dark:border-slate-800 transition-colors h-14">${chk}<td class="p-4 font-bold text-gray-800 dark:text-white max-w-[120px] truncate">${b.pat}</td><td class="p-4 text-gray-600 dark:text-slate-300 max-w-[200px] truncate">${b.descricao}</td><td class="p-4 text-gray-600 dark:text-slate-300 max-w-[150px] truncate">${b.loja}</td><td class="p-4 text-gray-600 dark:text-slate-300 max-w-[150px] truncate">${b.responsavel}</td><td class="p-4 text-center">${btnExc}</td></tr>`;
+            });
+            renderizarControlesPaginacao(tP, paginaAtualProdutos, 'produtos-paginacao', 'mudarPaginaProdutos');
+        }
+
+        function atualizarDashboard() {
+            const b = obterBensSalvos();
+            document.getElementById('dash-total').innerText = b.length;
+            document.getElementById('dash-lojas').innerText = obterLojas().filter(l => l.nome !== 'EM CONSERTO').length;
+            document.getElementById('dash-conserto').innerText = b.filter(x => x.loja === 'EM CONSERTO').length;
+        }
+
+        window.onload = function() { verificarLogin(); };
+
+    </script>
+</body>
+</html>
